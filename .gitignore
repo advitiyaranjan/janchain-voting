@@ -1,0 +1,14 @@
+node_modules
+coverage
+artifacts
+cache
+dist
+.codex-runtime
+.vercel
+.env
+client/.env
+server/.env
+deployments/*.local.json
+client/test-results
+client/playwright-report
+npm-debug.log*

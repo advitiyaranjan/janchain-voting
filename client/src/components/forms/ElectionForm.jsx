@@ -1,0 +1,180 @@
+import { useState } from "react";
+import Button from "../ui/Button";
+import Input from "../ui/Input";
+import Textarea from "../ui/Textarea";
+
+const emptyCandidate = () => ({
+  name: "",
+  party: "",
+  tagline: "",
+  description: "",
+  imageURI: "",
+});
+
+const initialState = {
+  title: "",
+  description: "",
+  startTime: "",
+  endTime: "",
+  candidates: [emptyCandidate(), emptyCandidate()],
+};
+
+function ElectionForm({ onSubmit, isLoading = false }) {
+  const [formState, setFormState] = useState(initialState);
+
+  const updateField = (name, value) => {
+    setFormState((current) => ({ ...current, [name]: value }));
+  };
+
+  const updateCandidate = (index, name, value) => {
+    setFormState((current) => ({
+      ...current,
+      candidates: current.candidates.map((candidate, candidateIndex) =>
+        candidateIndex === index ? { ...candidate, [name]: value } : candidate
+      ),
+    }));
+  };
+
+  const addCandidate = () => {
+    setFormState((current) => ({
+      ...current,
+      candidates: [...current.candidates, emptyCandidate()],
+    }));
+  };
+
+  const removeCandidate = (index) => {
+    setFormState((current) => ({
+      ...current,
+      candidates: current.candidates.filter((_, candidateIndex) => candidateIndex !== index),
+    }));
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    await onSubmit({
+      ...formState,
+      startTime: new Date(formState.startTime).toISOString(),
+      endTime: new Date(formState.endTime).toISOString(),
+      candidates: formState.candidates,
+    });
+    setFormState(initialState);
+  };
+
+  return (
+    <form className="space-y-5" onSubmit={handleSubmit}>
+      <div className="grid gap-4 md:grid-cols-2">
+        <label className="block space-y-2 text-sm font-medium text-slate-700 md:col-span-2">
+          <span>Election title</span>
+          <Input
+            required
+            value={formState.title}
+            onChange={(event) => updateField("title", event.target.value)}
+            placeholder="2026 National Students Council"
+          />
+        </label>
+
+        <label className="block space-y-2 text-sm font-medium text-slate-700 md:col-span-2">
+          <span>Description</span>
+          <Textarea
+            required
+            value={formState.description}
+            onChange={(event) => updateField("description", event.target.value)}
+            placeholder="Explain the scope, eligibility, and decision being voted on."
+          />
+        </label>
+
+        <label className="block space-y-2 text-sm font-medium text-slate-700">
+          <span>Start time</span>
+          <Input
+            required
+            type="datetime-local"
+            value={formState.startTime}
+            onChange={(event) => updateField("startTime", event.target.value)}
+          />
+        </label>
+
+        <label className="block space-y-2 text-sm font-medium text-slate-700">
+          <span>End time</span>
+          <Input
+            required
+            type="datetime-local"
+            value={formState.endTime}
+            onChange={(event) => updateField("endTime", event.target.value)}
+          />
+        </label>
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="display-copy text-lg font-semibold text-slate-900">Candidates</h3>
+            <p className="text-sm text-slate-500">Add at least two options. Candidate images are optional.</p>
+          </div>
+          <Button variant="secondary" onClick={addCandidate}>
+            Add candidate
+          </Button>
+        </div>
+
+        <div className="space-y-4">
+          {formState.candidates.map((candidate, index) => (
+            <div key={`${candidate.name}-${index}`} className="rounded-3xl border border-slate-200 bg-white/80 p-4">
+              <div className="mb-4 flex items-center justify-between">
+                <h4 className="font-semibold text-slate-900">Candidate {index + 1}</h4>
+                {formState.candidates.length > 2 && (
+                  <Button variant="ghost" className="px-3 py-2 text-xs" onClick={() => removeCandidate(index)}>
+                    Remove
+                  </Button>
+                )}
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="block space-y-2 text-sm font-medium text-slate-700">
+                  <span>Name</span>
+                  <Input
+                    required
+                    value={candidate.name}
+                    onChange={(event) => updateCandidate(index, "name", event.target.value)}
+                  />
+                </label>
+                <label className="block space-y-2 text-sm font-medium text-slate-700">
+                  <span>Party / Group</span>
+                  <Input
+                    value={candidate.party}
+                    onChange={(event) => updateCandidate(index, "party", event.target.value)}
+                  />
+                </label>
+                <label className="block space-y-2 text-sm font-medium text-slate-700">
+                  <span>Tagline</span>
+                  <Input
+                    value={candidate.tagline}
+                    onChange={(event) => updateCandidate(index, "tagline", event.target.value)}
+                  />
+                </label>
+                <label className="block space-y-2 text-sm font-medium text-slate-700">
+                  <span>Image URL</span>
+                  <Input
+                    value={candidate.imageURI}
+                    onChange={(event) => updateCandidate(index, "imageURI", event.target.value)}
+                  />
+                </label>
+                <label className="block space-y-2 text-sm font-medium text-slate-700 md:col-span-2">
+                  <span>Manifesto summary</span>
+                  <Textarea
+                    value={candidate.description}
+                    onChange={(event) => updateCandidate(index, "description", event.target.value)}
+                  />
+                </label>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <Button className="w-full" variant="accent" disabled={isLoading} type="submit">
+        {isLoading ? "Publishing election..." : "Create election"}
+      </Button>
+    </form>
+  );
+}
+
+export default ElectionForm;

@@ -1,0 +1,209 @@
+{
+  "info": {
+    "_postman_id": "5f8b3ab4-51d8-4f10-a72a-4c7f5f4de9c3",
+    "name": "JanChain Voting API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Sample requests for the JanChain Voting decentralized voting backend."
+  },
+  "variable": [
+    {
+      "key": "apiUrl",
+      "value": "http://localhost:5000/api"
+    },
+    {
+      "key": "jwt",
+      "value": ""
+    },
+    {
+      "key": "userId",
+      "value": ""
+    },
+    {
+      "key": "electionId",
+      "value": ""
+    },
+    {
+      "key": "walletAddress",
+      "value": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Aarav Singh\",\n  \"email\": \"aarav.singh@example.com\",\n  \"password\": \"Voter@123\",\n  \"walletAddress\": \"{{walletAddress}}\"\n}"
+            },
+            "url": "{{apiUrl}}/auth/register"
+          }
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@civicledger.app\",\n  \"password\": \"Admin@12345\"\n}"
+            },
+            "url": "{{apiUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Current User",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": "{{apiUrl}}/auth/me"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Elections",
+      "item": [
+        {
+          "name": "List Elections",
+          "request": {
+            "method": "GET",
+            "url": "{{apiUrl}}/elections"
+          }
+        },
+        {
+          "name": "Election Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": "{{apiUrl}}/elections/{{electionId}}"
+          }
+        },
+        {
+          "name": "Election Results",
+          "request": {
+            "method": "GET",
+            "url": "{{apiUrl}}/elections/{{electionId}}/results"
+          }
+        },
+        {
+          "name": "Verify Vote",
+          "request": {
+            "method": "GET",
+            "url": "{{apiUrl}}/elections/{{electionId}}/verify/{{walletAddress}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Admin Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": "{{apiUrl}}/admin/dashboard"
+          }
+        },
+        {
+          "name": "List Voters",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": "{{apiUrl}}/admin/users"
+          }
+        },
+        {
+          "name": "Approve Voter",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"approved\": true\n}"
+            },
+            "url": "{{apiUrl}}/admin/users/{{userId}}/approval"
+          }
+        },
+        {
+          "name": "Create Election",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"2026 Student Council President\",\n  \"description\": \"Election to choose the student council president.\",\n  \"startTime\": \"2026-04-10T09:00:00.000Z\",\n  \"endTime\": \"2026-04-10T18:00:00.000Z\",\n  \"candidates\": [\n    {\n      \"name\": \"Aditi Mehra\",\n      \"party\": \"Forward Campus\",\n      \"tagline\": \"Transparency first\",\n      \"description\": \"Prioritizes better student services and transparent budgeting.\",\n      \"imageURI\": \"\"\n    },\n    {\n      \"name\": \"Rohan Kapoor\",\n      \"party\": \"Action Union\",\n      \"tagline\": \"Vote for execution\",\n      \"description\": \"Focused on quick delivery of academic and club reforms.\",\n      \"imageURI\": \"\"\n    }\n  ]\n}"
+            },
+            "url": "{{apiUrl}}/admin/elections"
+          }
+        },
+        {
+          "name": "End Election",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": "{{apiUrl}}/admin/elections/{{electionId}}/end"
+          }
+        }
+      ]
+    }
+  ]
+}
