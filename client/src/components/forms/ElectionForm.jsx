@@ -14,10 +14,19 @@ const emptyCandidate = () => ({
 const initialState = {
   title: "",
   description: "",
+  category: "General",
+  accessMode: "restricted",
   startTime: "",
   endTime: "",
   candidates: [emptyCandidate(), emptyCandidate()],
 };
+
+const accessModes = [
+  { value: "restricted", label: "Approved voters", hint: "Only wallets on the voter registry." },
+  { value: "open", label: "Open poll", hint: "Any verified wallet, one vote each." },
+];
+
+const categorySuggestions = ["General", "Student Council", "Governance", "Community", "Workplace"];
 
 function ElectionForm({ onSubmit, isLoading = false }) {
   const [formState, setFormState] = useState(initialState);
@@ -51,13 +60,17 @@ function ElectionForm({ onSubmit, isLoading = false }) {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    await onSubmit({
+    const created = await onSubmit({
       ...formState,
       startTime: new Date(formState.startTime).toISOString(),
       endTime: new Date(formState.endTime).toISOString(),
       candidates: formState.candidates,
     });
-    setFormState(initialState);
+
+    // Keep the admin's input if publishing failed so they can fix and resubmit.
+    if (created) {
+      setFormState(initialState);
+    }
   };
 
   return (
@@ -82,6 +95,49 @@ function ElectionForm({ onSubmit, isLoading = false }) {
             placeholder="Explain the scope, eligibility, and decision being voted on."
           />
         </label>
+
+        <label className="block space-y-2 text-sm font-medium text-slate-700">
+          <span>Category</span>
+          <Input
+            required
+            list="election-categories"
+            value={formState.category}
+            onChange={(event) => updateField("category", event.target.value)}
+            placeholder="General"
+          />
+          <datalist id="election-categories">
+            {categorySuggestions.map((category) => (
+              <option key={category} value={category} />
+            ))}
+          </datalist>
+        </label>
+
+        <fieldset className="space-y-2 text-sm font-medium text-slate-700">
+          <legend>Who can vote</legend>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {accessModes.map((mode) => (
+              <label
+                key={mode.value}
+                className={`cursor-pointer rounded-2xl border px-4 py-3 transition ${
+                  formState.accessMode === mode.value
+                    ? "border-[var(--teal)] bg-teal-50"
+                    : "border-slate-200 bg-white/80 hover:bg-white"
+                }`}
+              >
+                <input
+                  className="sr-only"
+                  type="radio"
+                  name="accessMode"
+                  value={mode.value}
+                  checked={formState.accessMode === mode.value}
+                  onChange={() => updateField("accessMode", mode.value)}
+                />
+                <span className="block font-semibold text-slate-900">{mode.label}</span>
+                <span className="block text-xs font-normal text-slate-500">{mode.hint}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
 
         <label className="block space-y-2 text-sm font-medium text-slate-700">
           <span>Start time</span>
@@ -117,7 +173,7 @@ function ElectionForm({ onSubmit, isLoading = false }) {
 
         <div className="space-y-4">
           {formState.candidates.map((candidate, index) => (
-            <div key={`${candidate.name}-${index}`} className="rounded-3xl border border-slate-200 bg-white/80 p-4">
+            <div key={index} className="rounded-3xl border border-slate-200 bg-white/80 p-4">
               <div className="mb-4 flex items-center justify-between">
                 <h4 className="font-semibold text-slate-900">Candidate {index + 1}</h4>
                 {formState.candidates.length > 2 && (

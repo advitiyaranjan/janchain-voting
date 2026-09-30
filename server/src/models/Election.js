@@ -52,6 +52,16 @@ const electionSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    category: {
+      type: String,
+      default: "General",
+      trim: true,
+    },
+    accessMode: {
+      type: String,
+      enum: ["restricted", "open"],
+      default: "restricted",
+    },
     metadataURI: {
       type: String,
       default: "",
@@ -92,6 +102,7 @@ const electionSchema = new mongoose.Schema(
       required: true,
     },
     endedAt: Date,
+    extendedAt: Date,
     candidates: {
       type: [candidateSchema],
       default: [],

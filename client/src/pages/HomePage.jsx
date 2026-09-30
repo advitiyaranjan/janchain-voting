@@ -1,9 +1,30 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { electionApi } from "../api/elections";
 import Badge from "../components/ui/Badge";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 
 function HomePage() {
+  const [stats, setStats] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    electionApi
+      .stats()
+      .then((data) => {
+        if (!cancelled) {
+          setStats(data.stats);
+        }
+      })
+      // The strip is decorative; hide it when the API is unreachable.
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="page-shell space-y-8">
       <section className="hero-grid surface-card overflow-hidden px-6 py-10 sm:px-10 sm:py-14">
@@ -54,6 +75,27 @@ function HomePage() {
         </div>
       </section>
 
+      {stats && (
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            ["Live elections", stats.activeElections],
+            ["Upcoming", stats.upcomingElections],
+            ["Ballots on-chain", stats.totalVotes],
+            ["Approved voters", stats.approvedVoters],
+          ].map(([label, value]) => (
+            <Card key={label}>
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{label}</p>
+              <p className="mt-2 text-3xl font-bold text-[var(--ink)]">{value}</p>
+            </Card>
+          ))}
+          {stats.paused && (
+            <Card className="text-sm font-semibold text-rose-700 sm:col-span-2 lg:col-span-4">
+              Voting is temporarily paused by the election commission.
+            </Card>
+          )}
+        </section>
+      )}
+
       <section className="grid gap-6 md:grid-cols-3">
         {[
           {
@@ -62,9 +104,9 @@ function HomePage() {
               "Admins verify registrations, approve wallets, and sync eligible voter addresses to the contract.",
           },
           {
-            title: "Vote with MetaMask",
+            title: "Vote without gas fees",
             description:
-              "Voters connect a wallet, cast a single vote, and receive an immutable on-chain receipt.",
+              "Voters sign a ballot in MetaMask and the platform relays it, or pay their own gas. Either way the contract checks the signature.",
           },
           {
             title: "Audit results in real time",

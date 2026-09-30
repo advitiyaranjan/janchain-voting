@@ -7,12 +7,13 @@ import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import { useAuth } from "../context/AuthContext";
 import { useWallet } from "../hooks/useWallet";
-import { formatDateTime, shortenAddress } from "../lib/utils";
+import { buildExplorerUrl, formatDateTime, shortenAddress, shortenHash } from "../lib/utils";
 
 function DashboardPage() {
   const { user, issueWalletChallenge, refreshUser, verifyWalletChallenge } = useAuth();
   const wallet = useWallet();
   const [elections, setElections] = useState([]);
+  const [ballots, setBallots] = useState([]);
   const [loading, setLoading] = useState(true);
   const [linkingWallet, setLinkingWallet] = useState(false);
   const walletVerified = Boolean(user.walletAddress && user.linkedWalletAt);
@@ -31,6 +32,18 @@ function DashboardPage() {
       .catch((error) => toast.error(error.response?.data?.message || error.message))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!walletVerified) {
+      setBallots([]);
+      return;
+    }
+
+    electionApi
+      .myBallots()
+      .then((data) => setBallots(data.ballots))
+      .catch(() => setBallots([]));
+  }, [walletVerified, user.walletAddress]);
 
   const handleConnectWallet = async () => {
     try {
@@ -101,8 +114,8 @@ function DashboardPage() {
               <p className="mt-2 text-lg font-semibold text-slate-900">{shortenAddress(user.walletAddress)}</p>
             </div>
             <div className="rounded-3xl bg-white/85 p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Language</p>
-              <p className="mt-2 text-lg font-semibold uppercase text-slate-900">{user.preferredLanguage}</p>
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Ballots cast</p>
+              <p className="mt-2 text-lg font-semibold text-slate-900">{ballots.length}</p>
             </div>
           </div>
         </Card>
@@ -187,7 +200,10 @@ function DashboardPage() {
               <Card key={election._id || election.id}>
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <Badge variant={election.status}>{election.status}</Badge>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant={election.status}>{election.status}</Badge>
+                      {election.accessMode === "open" && <Badge variant="open">Open poll</Badge>}
+                    </div>
                     <h3 className="display-copy mt-3 text-2xl font-semibold text-slate-900">{election.title}</h3>
                     <p className="mt-2 text-sm text-slate-600">{election.description}</p>
                   </div>
@@ -204,6 +220,51 @@ function DashboardPage() {
                 </div>
               </Card>
             ))}
+          </div>
+        )}
+      </section>
+
+      <section>
+        <div className="mb-4">
+          <h2 className="display-copy text-2xl font-semibold text-slate-900">My ballots</h2>
+          <p className="text-sm text-slate-500">
+            Receipts read from the blockchain for your verified wallet. They cannot be edited or deleted.
+          </p>
+        </div>
+
+        {!walletVerified ? (
+          <Card className="text-sm text-slate-500">Verify your wallet to see your on-chain ballot receipts.</Card>
+        ) : ballots.length === 0 ? (
+          <Card className="text-sm text-slate-500">You have not voted in any election yet.</Card>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2">
+            {ballots.map((ballot) => {
+              const explorerUrl = buildExplorerUrl(ballot.transactionHash);
+              return (
+                <Card key={ballot.electionId}>
+                  <Badge variant="neutral">{ballot.category}</Badge>
+                  <h3 className="display-copy mt-3 text-xl font-semibold text-slate-900">{ballot.electionTitle}</h3>
+                  <p className="mt-2 text-sm text-slate-600">
+                    Voted for <span className="font-semibold">{ballot.candidateName || `#${ballot.candidateId}`}</span>
+                    {ballot.timestamp ? ` on ${formatDateTime(ballot.timestamp * 1000)}` : ""}.
+                  </p>
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-500">
+                    <span className="font-mono text-xs">
+                      {explorerUrl ? (
+                        <a className="text-[var(--teal)]" href={explorerUrl} rel="noreferrer" target="_blank">
+                          {shortenHash(ballot.transactionHash)}
+                        </a>
+                      ) : (
+                        shortenHash(ballot.transactionHash)
+                      )}
+                    </span>
+                    <Link to={`/results/${ballot.electionId}`} className="font-semibold text-[var(--teal)]">
+                      View results
+                    </Link>
+                  </div>
+                </Card>
+              );
+            })}
           </div>
         )}
       </section>

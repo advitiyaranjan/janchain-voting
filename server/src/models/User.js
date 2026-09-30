@@ -57,6 +57,7 @@ const userSchema = new mongoose.Schema(
     },
     walletChallenge: walletChallengeSchema,
     linkedWalletAt: Date,
+    approvedAt: Date,
     lastLoginAt: Date,
   },
   {

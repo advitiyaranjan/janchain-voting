@@ -87,7 +87,7 @@
           "name": "List Elections",
           "request": {
             "method": "GET",
-            "url": "{{apiUrl}}/elections"
+            "url": "{{apiUrl}}/elections?status=all&category=all&q="
           }
         },
         {
@@ -115,6 +115,54 @@
           "request": {
             "method": "GET",
             "url": "{{apiUrl}}/elections/{{electionId}}/verify/{{walletAddress}}"
+          }
+        },
+        {
+          "name": "Platform Stats",
+          "request": {
+            "method": "GET",
+            "url": "{{apiUrl}}/elections/stats"
+          }
+        },
+        {
+          "name": "My Ballots",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": "{{apiUrl}}/elections/me/ballots"
+          }
+        },
+        {
+          "name": "Election Activity",
+          "request": {
+            "method": "GET",
+            "url": "{{apiUrl}}/elections/{{electionId}}/activity?limit=20"
+          }
+        },
+        {
+          "name": "Relay Gasless Vote",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"candidateId\": 1,\n  \"voterAddress\": \"{{walletAddress}}\",\n  \"deadline\": 1893456000,\n  \"signature\": \"0x...\"\n}"
+            },
+            "url": "{{apiUrl}}/elections/{{electionId}}/relay-vote"
           }
         }
       ]
@@ -145,7 +193,7 @@
                 "value": "Bearer {{jwt}}"
               }
             ],
-            "url": "{{apiUrl}}/admin/users"
+            "url": "{{apiUrl}}/admin/users?status=pending&q="
           }
         },
         {
@@ -185,7 +233,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"title\": \"2026 Student Council President\",\n  \"description\": \"Election to choose the student council president.\",\n  \"startTime\": \"2026-04-10T09:00:00.000Z\",\n  \"endTime\": \"2026-04-10T18:00:00.000Z\",\n  \"candidates\": [\n    {\n      \"name\": \"Aditi Mehra\",\n      \"party\": \"Forward Campus\",\n      \"tagline\": \"Transparency first\",\n      \"description\": \"Prioritizes better student services and transparent budgeting.\",\n      \"imageURI\": \"\"\n    },\n    {\n      \"name\": \"Rohan Kapoor\",\n      \"party\": \"Action Union\",\n      \"tagline\": \"Vote for execution\",\n      \"description\": \"Focused on quick delivery of academic and club reforms.\",\n      \"imageURI\": \"\"\n    }\n  ]\n}"
+              "raw": "{\n  \"title\": \"2026 Student Council President\",\n  \"description\": \"Election to choose the student council president.\",\n  \"category\": \"Student Council\",\n  \"accessMode\": \"restricted\",\n  \"startTime\": \"2026-04-10T09:00:00.000Z\",\n  \"endTime\": \"2026-04-10T18:00:00.000Z\",\n  \"candidates\": [\n    {\n      \"name\": \"Aditi Mehra\",\n      \"party\": \"Forward Campus\",\n      \"tagline\": \"Transparency first\",\n      \"description\": \"Prioritizes better student services and transparent budgeting.\",\n      \"imageURI\": \"\"\n    },\n    {\n      \"name\": \"Rohan Kapoor\",\n      \"party\": \"Action Union\",\n      \"tagline\": \"Vote for execution\",\n      \"description\": \"Focused on quick delivery of academic and club reforms.\",\n      \"imageURI\": \"\"\n    }\n  ]\n}"
             },
             "url": "{{apiUrl}}/admin/elections"
           }
@@ -201,6 +249,69 @@
               }
             ],
             "url": "{{apiUrl}}/admin/elections/{{electionId}}/end"
+          }
+        },
+        {
+          "name": "Bulk Approve Voters",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userIds\": [\n    \"{{userId}}\"\n  ],\n  \"approved\": true\n}"
+            },
+            "url": "{{apiUrl}}/admin/users/bulk-approval"
+          }
+        },
+        {
+          "name": "Extend Election",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"endTime\": \"2026-12-31T18:00:00.000Z\"\n}"
+            },
+            "url": "{{apiUrl}}/admin/elections/{{electionId}}/extend"
+          }
+        },
+        {
+          "name": "Pause Or Resume Voting",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paused\": true\n}"
+            },
+            "url": "{{apiUrl}}/admin/system/pause"
           }
         }
       ]

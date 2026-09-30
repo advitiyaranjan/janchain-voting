@@ -11,6 +11,8 @@ import { formatDateTime } from "../lib/utils";
 function ElectionListPage() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
+  const [category, setCategory] = useState("all");
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [elections, setElections] = useState([]);
   const deferredSearch = useDeferredValue(search);
@@ -18,11 +20,15 @@ function ElectionListPage() {
   useEffect(() => {
     setLoading(true);
     electionApi
-      .list({ q: deferredSearch, status })
-      .then((data) => setElections(data.elections))
+      .list({ q: deferredSearch, status, category })
+      .then((data) => {
+        setElections(data.elections);
+        // A filtered response only lists matching categories, so keep every one seen so far.
+        setCategories((current) => [...new Set([...current, ...data.categories])].sort());
+      })
       .catch((error) => toast.error(error.response?.data?.message || error.message))
       .finally(() => setLoading(false));
-  }, [deferredSearch, status]);
+  }, [deferredSearch, status, category]);
 
   return (
     <div className="page-shell space-y-6">
@@ -55,10 +61,28 @@ function ElectionListPage() {
             ))}
           </div>
         </div>
+        {categories.length > 1 && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {["all", ...categories].map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setCategory(value)}
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                  category === value ? "bg-[var(--teal)] text-white" : "bg-white/80 text-slate-600 hover:bg-white"
+                }`}
+              >
+                {value === "all" ? "All categories" : value}
+              </button>
+            ))}
+          </div>
+        )}
       </Card>
 
       {loading ? (
         <Card>Loading election board...</Card>
+      ) : elections.length === 0 ? (
+        <Card className="text-sm text-slate-500">No elections match these filters yet.</Card>
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
           {elections.map((election) => {
@@ -68,7 +92,11 @@ function ElectionListPage() {
               <Card key={electionId}>
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <Badge variant={election.status}>{election.status}</Badge>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant={election.status}>{election.status}</Badge>
+                      {election.accessMode === "open" && <Badge variant="open">Open poll</Badge>}
+                      <Badge variant="neutral">{election.category}</Badge>
+                    </div>
                     <h2 className="display-copy mt-3 text-2xl font-semibold text-slate-900">{election.title}</h2>
                     <p className="mt-3 text-sm leading-6 text-slate-600">{election.description}</p>
                   </div>

@@ -10,9 +10,13 @@ JanChain Voting is a complete end-to-end decentralized voting platform built wit
 - Admin approval flow for eligible voters
 - Manual wallet resync from the admin console when blockchain state needs reconciliation
 - Smart-contract-enforced one-wallet-one-vote logic
-- Election creation, candidate management, time-based voting windows, and manual election closure
-- Real-time results sourced from blockchain reads
-- Vote verification by wallet address
+- Restricted elections (approved voter registry) and open polls (any verified wallet)
+- Gasless voting: voters sign an EIP-712 ballot and the server relays it, paying the gas
+- Election creation with categories, candidate management, time-based voting windows, extension, and manual closure
+- Emergency pause that stops every voting path on-chain
+- Bulk voter approval, voter search and filters in the admin console
+- Real-time results sourced from blockchain reads, with turnout, tie detection, and a public ballot ledger
+- Vote verification by wallet address and a per-voter "My ballots" receipt list
 - Optional IPFS metadata upload through Pinata
 - Hardhat unit tests, client UI test, linting, and production client build
 
@@ -44,7 +48,7 @@ flowchart LR
 3. If a wallet is linked, the backend can also approve that wallet on-chain.
 4. The admin creates an election in the backend.
 5. The backend optionally uploads metadata to IPFS, then creates the election on-chain.
-6. The voter opens the election page, connects MetaMask, and submits a vote directly to the smart contract.
+6. The voter opens the election page, connects MetaMask, and either signs a gasless ballot that the API relays or sends the vote transaction directly.
 7. The frontend and backend read live results from the chain and show verification details.
 
 ## Project Structure
@@ -93,16 +97,19 @@ flowchart LR
 `DecentralizedVoting.sol` uses role-based access control from OpenZeppelin:
 
 - `DEFAULT_ADMIN_ROLE`: contract owner
-- `ELECTION_ADMIN_ROLE`: may create and end elections
+- `ELECTION_ADMIN_ROLE`: may create, extend, and end elections
 - `VOTER_APPROVER_ROLE`: may approve wallets for voting
 
 ### Contract features
 
 - `createElection(...)`: creates a new election with candidate names and optional image URIs
 - `approveVoter(...)` and `approveVoters(...)`: manages voter eligibility on-chain
-- `castVote(...)`: records exactly one vote per approved wallet per election
-- `endElection(...)`: allows manual closure before the end timestamp
-- `getElection(...)`, `getElectionCandidates(...)`, `getVoteReceipt(...)`: read methods for the UI/API
+- `createElection(..., restricted)`: `restricted = true` requires the approved voter registry, `false` makes an open poll
+- `castVote(...)`: records exactly one vote per eligible wallet per election
+- `castVoteBySig(...)`: records a vote from an EIP-712 signed `Ballot(electionId, candidateId, voter, deadline)`; anyone may relay it, but the signature binds the choice
+- `endElection(...)` and `extendElection(...)`: manual closure or a later end time
+- `pause()` / `unpause()`: emergency stop for all voting (`DEFAULT_ADMIN_ROLE`)
+- `getElection(...)`, `getElections(offset, limit)`, `getElectionCandidates(...)`, `getVoteReceipt(...)`, `canVote(...)`: read methods for the UI/API
 
 ### Security and gas notes
 
@@ -110,7 +117,8 @@ flowchart LR
 - `uint48`, `uint16`, and `uint96` are used to keep packed storage efficient
 - `calldata` and `unchecked` increments reduce overhead in loops
 - Voting windows are enforced by `block.timestamp`
-- Double voting is blocked through `hasVoted[electionId][wallet]`
+- Double voting is blocked through `hasVoted[electionId][wallet]`, which also makes signed ballots non-replayable
+- Signed ballots carry a deadline; the client signs with a 10-minute validity window
 
 ## REST API Overview
 
@@ -124,19 +132,26 @@ flowchart LR
 
 ### Elections
 
-- `GET /api/elections`
+- `GET /api/elections` (`q`, `status`, `category` filters)
+- `GET /api/elections/stats`
+- `GET /api/elections/me/ballots` (auth)
 - `GET /api/elections/:electionId`
 - `GET /api/elections/:electionId/results`
+- `GET /api/elections/:electionId/activity`
 - `GET /api/elections/:electionId/verify/:walletAddress`
+- `POST /api/elections/:electionId/relay-vote` (auth, rate limited): relays a signed ballot for the caller's verified wallet
 
 ### Admin
 
 - `GET /api/admin/dashboard`
-- `GET /api/admin/users`
+- `GET /api/admin/users` (`q`, `status` = `all` | `pending` | `approved` | `unverified`)
 - `PATCH /api/admin/users/:userId/approval`
+- `POST /api/admin/users/bulk-approval`
 - `POST /api/admin/users/:userId/sync-wallet`
 - `POST /api/admin/elections`
 - `PATCH /api/admin/elections/:electionId/end`
+- `PATCH /api/admin/elections/:electionId/extend`
+- `POST /api/admin/system/pause`
 
 ## Frontend Pages
 
@@ -173,7 +188,7 @@ For local development, set:
   - `RPC_URL=http://127.0.0.1:8545`
   - `CHAIN_ID=31337`
   - `CONTRACT_ADDRESS=<deployed contract>`
-  - `SERVER_WALLET_PRIVATE_KEY=<Hardhat account #0 private key for local admin writes>`
+  - `SERVER_WALLET_PRIVATE_KEY=<Hardhat account #0 private key for local admin writes>`. This wallet also pays gas for relayed (gasless) ballots, so keep it funded on testnets. Without it, voters can still vote by paying their own gas.
 - Client:
 - `VITE_API_URL=http://localhost:5000/api`
 - `VITE_CONTRACT_ADDRESS=<deployed contract>`
@@ -313,7 +328,8 @@ Import [docs/JanChainVoting.postman_collection.json](./docs/JanChainVoting.postm
 
 ## Notes
 
-- Voting transactions are signed by the voter in MetaMask, not by the backend.
+- Every ballot is signed by the voter in MetaMask. For gasless votes the backend only submits the voter's signed ballot; the contract rejects it if the signature does not match the voter, candidate, and election.
+- Contract v2 (open polls, gasless ballots, pause, extension) changes the ABI and the EIP-712 domain, so an existing v1 deployment must be redeployed. `npm run deploy:localhost` re-exports the ABI and updates `CONTRACT_ADDRESS` / `VITE_CONTRACT_ADDRESS` in existing `.env` files. Catalog entries from an older contract address are hidden automatically.
 - Admin election creation and voter approval can be synced to the contract through the server wallet.
 - IPFS upload is optional and enabled only when `PINATA_JWT` is configured.
 - Polygon Mumbai is no longer the preferred Polygon testnet path, so this project uses Polygon Amoy instead.

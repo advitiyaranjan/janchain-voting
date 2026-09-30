@@ -3,28 +3,12 @@ const User = require("../models/User");
 const ApiError = require("../utils/ApiError");
 const blockchainService = require("../services/blockchainService");
 const { uploadElectionMetadata } = require("../services/ipfsService");
+const { presentElection } = require("../utils/electionPresenter");
 const env = require("../config/env");
 const roles = require("../constants/roles");
 
-function resolveStatus(snapshot, election) {
-  if (snapshot) {
-    if (snapshot.hasEnded) {
-      return "ended";
-    }
-
-    return snapshot.isActive ? "active" : "scheduled";
-  }
-
-  const now = Date.now();
-  const start = new Date(election.startTime).getTime();
-  const end = new Date(election.endTime).getTime();
-  if (now > end || election.endedAt) {
-    return "ended";
-  }
-  if (now >= start && now <= end) {
-    return "active";
-  }
-  return "scheduled";
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 async function getDashboard(req, res) {
@@ -38,11 +22,11 @@ async function getDashboard(req, res) {
     pendingWalletVerification,
     blockchain,
   ] = await Promise.all([
-    User.countDocuments(),
-    User.countDocuments({ isApproved: true }),
+    User.countDocuments({ role: roles.VOTER }),
+    User.countDocuments({ isApproved: true, role: roles.VOTER }),
     User.countDocuments({ isApproved: false, role: roles.VOTER }),
     Election.countDocuments(),
-    User.countDocuments({ linkedWalletAt: { $ne: null }, walletAddress: { $ne: null } }),
+    User.countDocuments({ linkedWalletAt: { $ne: null }, walletAddress: { $ne: null }, role: roles.VOTER }),
     User.countDocuments({
       isApproved: true,
       linkedWalletAt: { $ne: null },
@@ -61,14 +45,13 @@ async function getDashboard(req, res) {
       rpcUrl: env.rpcUrl,
       hasServerWallet: Boolean(env.serverWalletPrivateKey),
       onChainElectionCount: null,
-      error: error.message,
+      approvedVoterCount: null,
+      paused: null,
+      error: blockchainService.toApiError(error).message,
     })),
   ]);
 
-  const recentElections = await Election.find()
-    .sort({ createdAt: -1 })
-    .limit(5)
-    .lean();
+  const recentElections = await Election.find().sort({ createdAt: -1 }).limit(5).lean();
 
   res.json({
     metrics: {
@@ -82,54 +65,104 @@ async function getDashboard(req, res) {
       chainConfigured: blockchainService.isConfigured(),
     },
     blockchain,
-    recentElections: recentElections.map((election) => ({
-      id: election._id.toString(),
-      title: election.title,
-      status: resolveStatus(null, election),
-      startTime: election.startTime,
-      endTime: election.endTime,
-      onChainElectionId: election.onChainElectionId,
-      transactionHash: election.transactionHash,
-    })),
+    recentElections: recentElections.map((election) => presentElection(election, null)),
     administrator: req.user.toJSON(),
   });
 }
 
-async function listPendingUsers(_req, res) {
-  const users = await User.find({ role: "voter" }).sort({ createdAt: -1 });
+async function listUsers(req, res) {
+  const { q = "", status = "all" } = req.query;
+  const filters = { role: roles.VOTER };
+  const search = String(q).trim();
+
+  if (search) {
+    const pattern = { $regex: escapeRegex(search), $options: "i" };
+    filters.$or = [{ fullName: pattern }, { email: pattern }, { walletAddress: pattern }];
+  }
+
+  if (status === "pending") {
+    filters.isApproved = false;
+  } else if (status === "approved") {
+    filters.isApproved = true;
+  } else if (status === "unverified") {
+    filters.linkedWalletAt = null;
+  }
+
+  const users = await User.find(filters).sort({ createdAt: -1 });
   res.json({
     users: users.map((user) => user.toJSON()),
   });
+}
+
+async function syncApprovalOnChain(user, approved) {
+  if (!user.walletAddress || !user.linkedWalletAt || !blockchainService.isConfigured()) {
+    return { transactionHash: null, warning: null };
+  }
+
+  try {
+    const result = await blockchainService.approveVoter(user.walletAddress, approved);
+    return { transactionHash: result.transactionHash, warning: null };
+  } catch (error) {
+    return { transactionHash: null, warning: `Saved, but the on-chain sync failed: ${error.message}` };
+  }
 }
 
 async function updateUserApproval(req, res) {
   const { userId } = req.validated.params;
   const { approved } = req.validated.body;
 
-  const user = await User.findById(userId);
+  const user = await User.findOne({ _id: userId, role: roles.VOTER });
   if (!user) {
-    throw new ApiError(404, "User not found.");
+    throw new ApiError(404, "Voter not found.");
   }
 
   user.isApproved = approved;
+  user.approvedAt = approved ? new Date() : null;
   await user.save();
+
+  const { transactionHash, warning } = await syncApprovalOnChain(user, approved);
+
+  res.json({
+    message: approved ? `${user.fullName} is approved to vote.` : `${user.fullName}'s approval was revoked.`,
+    transactionHash,
+    warning,
+    user: user.toJSON(),
+  });
+}
+
+async function bulkUpdateApproval(req, res) {
+  const { userIds, approved } = req.validated.body;
+  const users = await User.find({ _id: { $in: userIds }, role: roles.VOTER });
+
+  if (!users.length) {
+    throw new ApiError(404, "No matching voters were found.");
+  }
+
+  await User.updateMany(
+    { _id: { $in: users.map((user) => user._id) } },
+    { $set: { isApproved: approved, approvedAt: approved ? new Date() : null } }
+  );
+
+  const syncableWallets = users
+    .filter((user) => user.walletAddress && user.linkedWalletAt)
+    .map((user) => user.walletAddress);
 
   let transactionHash = null;
   let warning = null;
-  if (user.walletAddress && user.linkedWalletAt && blockchainService.isConfigured()) {
+  if (syncableWallets.length && blockchainService.isConfigured()) {
     try {
-      const blockchainResult = await blockchainService.approveVoter(user.walletAddress, approved);
-      transactionHash = blockchainResult.transactionHash;
+      const result = await blockchainService.approveVoters(syncableWallets, approved);
+      transactionHash = result.transactionHash;
     } catch (error) {
-      warning = error.message;
+      warning = `Saved, but the on-chain sync failed: ${error.message}`;
     }
   }
 
   res.json({
-    message: approved ? "User approved successfully." : "User approval revoked successfully.",
+    message: `${users.length} voter${users.length === 1 ? "" : "s"} ${approved ? "approved" : "revoked"}.`,
+    syncedWallets: transactionHash ? syncableWallets.length : 0,
     transactionHash,
     warning,
-    user: user.toJSON(),
   });
 }
 
@@ -141,7 +174,7 @@ async function createElection(req, res) {
     );
   }
 
-  const { title, description, startTime, endTime, candidates } = req.validated.body;
+  const { title, description, category, accessMode, startTime, endTime, candidates } = req.validated.body;
   const candidateNames = candidates.map((candidate) => candidate.name.trim().toLowerCase());
   const hasDuplicates = candidateNames.some((name, index) => candidateNames.indexOf(name) !== index);
 
@@ -152,6 +185,8 @@ async function createElection(req, res) {
   const metadata = {
     title,
     description,
+    category,
+    accessMode,
     startTime,
     endTime,
     chainId: env.chainId,
@@ -175,6 +210,7 @@ async function createElection(req, res) {
     endTime,
     metadataURI,
     candidates,
+    restricted: accessMode === "restricted",
   });
 
   if (!blockchainResult.electionId) {
@@ -185,6 +221,8 @@ async function createElection(req, res) {
     onChainElectionId: blockchainResult.electionId,
     title,
     description,
+    category,
+    accessMode,
     metadataURI,
     contractAddress: env.contractAddress,
     chainId: env.chainId,
@@ -204,7 +242,7 @@ async function createElection(req, res) {
   });
 
   res.status(201).json({
-    message: "Election created successfully.",
+    message: "Election published on-chain.",
     election: election.toJSON(),
     blockchain: blockchainResult,
   });
@@ -257,17 +295,55 @@ async function endElection(req, res) {
   await election.save();
 
   res.json({
-    message: "Election ended successfully.",
+    message: "Election closed. Results are now final.",
     transactionHash: blockchainResult.transactionHash,
     election: election.toJSON(),
   });
 }
 
+async function extendElection(req, res) {
+  const { electionId } = req.validated.params;
+  const { endTime } = req.validated.body;
+  const election = await Election.findById(electionId);
+
+  if (!election) {
+    throw new ApiError(404, "Election not found.");
+  }
+
+  if (new Date(endTime) <= new Date(election.endTime)) {
+    throw new ApiError(422, "The new end time must be later than the current end time.");
+  }
+
+  const blockchainResult = await blockchainService.extendElection(election.onChainElectionId, endTime);
+  election.endTime = new Date(endTime);
+  election.extendedAt = new Date();
+  await election.save();
+
+  res.json({
+    message: "Voting window extended.",
+    transactionHash: blockchainResult.transactionHash,
+    election: election.toJSON(),
+  });
+}
+
+async function setVotingPaused(req, res) {
+  const { paused } = req.validated.body;
+  const result = await blockchainService.setPaused(paused);
+
+  res.json({
+    message: paused ? "All voting is paused." : "Voting has resumed.",
+    ...result,
+  });
+}
+
 module.exports = {
+  bulkUpdateApproval,
   createElection,
   endElection,
+  extendElection,
   getDashboard,
-  listPendingUsers,
+  listUsers,
+  setVotingPaused,
   syncUserWallet,
   updateUserApproval,
 };

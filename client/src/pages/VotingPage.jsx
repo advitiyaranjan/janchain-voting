@@ -7,7 +7,7 @@ import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import { useAuth } from "../context/AuthContext";
 import { useWallet } from "../hooks/useWallet";
-import { castVote } from "../lib/contract";
+import { castVote, describeVoteError, signBallot } from "../lib/contract";
 import { buildExplorerUrl, formatDateTime, shortenAddress, shortenHash } from "../lib/utils";
 
 function getVotingStatusMessage({
@@ -18,6 +18,8 @@ function getVotingStatusMessage({
   walletAddress,
   walletMatchesProfile,
   walletVerified,
+  isExpectedNetwork,
+  method,
 }) {
   if (verification?.hasVoted) {
     return verification.candidateName
@@ -29,8 +31,8 @@ function getVotingStatusMessage({
     return "Voting opens only while the election is active.";
   }
 
-  if (!user.isApproved) {
-    return "Your voter account still needs administrator approval.";
+  if (election.accessMode !== "open" && !user.isApproved) {
+    return "Your voter account still needs administrator approval for this election.";
   }
 
   if (!walletVerified) {
@@ -45,11 +47,17 @@ function getVotingStatusMessage({
     return "Connect the same wallet address that is linked to your voter account.";
   }
 
+  if (!isExpectedNetwork) {
+    return "Switch MetaMask to the voting network to continue.";
+  }
+
   if (!selectedCandidateId) {
     return "Select a candidate to unlock the submit action.";
   }
 
-  return "Everything is ready. Your vote will be submitted directly to the smart contract.";
+  return method === "gasless"
+    ? "Everything is ready. You will sign your ballot in MetaMask and the platform submits it, paying the gas."
+    : "Everything is ready. MetaMask will send your vote to the smart contract and you pay the gas.";
 }
 
 function VotingPage() {
@@ -58,6 +66,9 @@ function VotingPage() {
   const wallet = useWallet();
   const [election, setElection] = useState(null);
   const [verification, setVerification] = useState(null);
+  const [ballotConfig, setBallotConfig] = useState(null);
+  const [method, setMethod] = useState("gasless");
+  const [receipt, setReceipt] = useState(null);
   const [selectedCandidateId, setSelectedCandidateId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -70,6 +81,10 @@ function VotingPage() {
       const data = await electionApi.getById(electionId);
       setElection(data.election);
       setVerification(data.verification);
+      setBallotConfig(data.ballot);
+      if (!data.ballot?.gaslessEnabled) {
+        setMethod("direct");
+      }
     } catch (error) {
       toast.error(error.response?.data?.message || error.message);
     } finally {
@@ -89,9 +104,12 @@ function VotingPage() {
     return user.walletAddress.toLowerCase() === wallet.walletAddress.toLowerCase();
   }, [user.walletAddress, wallet.walletAddress]);
 
+  const isOpenPoll = election?.accessMode === "open";
+  const gaslessAvailable = Boolean(ballotConfig?.gaslessEnabled);
+
   const canSubmitVote = Boolean(
     selectedCandidateId &&
-      user.isApproved &&
+      (isOpenPoll || user.isApproved) &&
       walletVerified &&
       wallet.walletAddress &&
       walletMatchesProfile &&
@@ -109,6 +127,8 @@ function VotingPage() {
         walletAddress: wallet.walletAddress,
         walletMatchesProfile,
         walletVerified,
+        isExpectedNetwork: wallet.isExpectedNetwork,
+        method,
       })
     : "";
 
@@ -163,26 +183,49 @@ function VotingPage() {
   const handleVote = async () => {
     setSubmitting(true);
     try {
-      if (!wallet.walletAddress) {
-        await wallet.connectWallet();
-      }
+      const connectedWallet = wallet.walletAddress || (await wallet.connectWallet());
 
       if (!walletVerified) {
         throw new Error("Verify your wallet before casting a ballot.");
       }
 
-      if (!walletMatchesProfile) {
+      if (connectedWallet.toLowerCase() !== user.walletAddress.toLowerCase()) {
         throw new Error("Connect the same wallet address that is linked to your voter account.");
       }
 
+      // MetaMask only signs typed data for the active chain, so both paths need the right network.
       await wallet.ensureExpectedNetwork();
-      const result = await castVote(election.onChainElectionId, selectedCandidateId);
-      const explorerUrl = buildExplorerUrl(result.transactionHash);
-      toast.success(explorerUrl ? `Vote submitted: ${explorerUrl}` : "Vote submitted on-chain.");
+      const candidate = election.candidates.find((item) => item.candidateId === selectedCandidateId);
+
+      if (method === "gasless") {
+        const { signature, deadline } = await signBallot(ballotConfig.domain, {
+          onChainElectionId: election.onChainElectionId,
+          candidateId: selectedCandidateId,
+          voterAddress: connectedWallet,
+        });
+        const data = await electionApi.relayVote(electionId, {
+          candidateId: selectedCandidateId,
+          voterAddress: connectedWallet,
+          deadline,
+          signature,
+        });
+        setReceipt(data.receipt);
+      } else {
+        const result = await castVote(election.onChainElectionId, selectedCandidateId);
+        setReceipt({
+          candidateName: candidate?.name || null,
+          candidateId: selectedCandidateId,
+          transactionHash: result.transactionHash,
+          blockNumber: result.blockNumber,
+          gasless: false,
+        });
+      }
+
+      toast.success("Your vote is recorded on-chain.");
       setSelectedCandidateId(null);
       await loadElection();
     } catch (error) {
-      toast.error(error.shortMessage || error.response?.data?.message || error.message);
+      toast.error(describeVoteError(error));
     } finally {
       setSubmitting(false);
     }
@@ -201,7 +244,11 @@ function VotingPage() {
       <Card className="hero-grid p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-3xl">
-            <Badge variant={election.status}>{election.status}</Badge>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant={election.status}>{election.status}</Badge>
+              <Badge variant={isOpenPoll ? "open" : "neutral"}>{isOpenPoll ? "Open poll" : "Approved voters only"}</Badge>
+              <Badge variant="info">{election.category}</Badge>
+            </div>
             <h1 className="display-copy mt-5 text-4xl font-bold text-[var(--ink)]">{election.title}</h1>
             <p className="mt-4 text-slate-600">{election.description}</p>
           </div>
@@ -220,7 +267,7 @@ function VotingPage() {
             <div>
               <h2 className="display-copy text-2xl font-semibold text-slate-900">Choose a candidate</h2>
               <p className="text-sm text-slate-500">
-                Your selection is submitted directly to the smart contract through MetaMask.
+                Your selection is recorded by the smart contract and cannot be changed afterwards.
               </p>
             </div>
             <Link to={`/results/${electionId}`} className="text-sm font-semibold text-[var(--teal)]">
@@ -254,6 +301,53 @@ function VotingPage() {
             })}
           </div>
 
+          {!verification?.hasVoted && election.status === "active" && (
+            <fieldset className="mt-6">
+              <legend className="text-sm font-semibold text-slate-900">How do you want to submit?</legend>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                {[
+                  {
+                    value: "gasless",
+                    label: "Gasless",
+                    hint: gaslessAvailable
+                      ? "Sign your ballot for free. The platform pays the network fee."
+                      : "Unavailable: the server has no relayer wallet configured.",
+                    disabled: !gaslessAvailable,
+                  },
+                  {
+                    value: "direct",
+                    label: "Pay my own gas",
+                    hint: "Send the transaction yourself from MetaMask.",
+                    disabled: false,
+                  },
+                ].map((option) => (
+                  <label
+                    key={option.value}
+                    className={`rounded-3xl border p-4 text-sm transition ${
+                      option.disabled
+                        ? "cursor-not-allowed border-slate-200 bg-slate-50 opacity-60"
+                        : method === option.value
+                          ? "cursor-pointer border-[var(--teal)] bg-teal-50"
+                          : "cursor-pointer border-slate-200 bg-white/80 hover:bg-white"
+                    }`}
+                  >
+                    <input
+                      className="sr-only"
+                      type="radio"
+                      name="voteMethod"
+                      value={option.value}
+                      checked={method === option.value}
+                      disabled={option.disabled}
+                      onChange={() => setMethod(option.value)}
+                    />
+                    <span className="block font-semibold text-slate-900">{option.label}</span>
+                    <span className="mt-1 block text-slate-500">{option.hint}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
+
           <div className="mt-6 flex flex-wrap gap-3">
             {!wallet.walletAddress && wallet.hasWallet && (
               <Button variant="secondary" onClick={handleConnectWallet}>
@@ -271,10 +365,38 @@ function VotingPage() {
               </Button>
             )}
             <Button disabled={submitting || !canSubmitVote} onClick={handleVote}>
-              {submitting ? "Submitting vote..." : verification?.hasVoted ? "Vote already recorded" : "Cast vote on-chain"}
+              {submitting
+                ? method === "gasless"
+                  ? "Signing and submitting..."
+                  : "Submitting vote..."
+                : verification?.hasVoted
+                  ? "Vote already recorded"
+                  : method === "gasless"
+                    ? "Sign and cast vote"
+                    : "Cast vote on-chain"}
             </Button>
           </div>
           <p className="mt-4 text-sm text-slate-500">{votingStatusMessage}</p>
+
+          {receipt && (
+            <div className="mt-6 rounded-3xl border border-emerald-200 bg-emerald-50 p-5 text-sm text-emerald-900">
+              <p className="font-semibold">Ballot receipt</p>
+              <p className="mt-2">
+                Vote for {receipt.candidateName || `candidate #${receipt.candidateId}`}
+                {receipt.gasless ? ", relayed gas-free" : ""}.
+              </p>
+              <p className="mt-2 break-all">Transaction: {receipt.transactionHash}</p>
+              {receipt.blockNumber && <p className="mt-1">Block: {receipt.blockNumber}</p>}
+              <div className="mt-3 flex flex-wrap gap-4 font-semibold">
+                {buildExplorerUrl(receipt.transactionHash) && (
+                  <a href={buildExplorerUrl(receipt.transactionHash)} rel="noreferrer" target="_blank">
+                    Open block explorer
+                  </a>
+                )}
+                <Link to={`/results/${electionId}`}>Verify on the results page</Link>
+              </div>
+            </div>
+          )}
         </Card>
 
         <div className="space-y-6">
@@ -283,7 +405,13 @@ function VotingPage() {
             <div className="mt-5 space-y-4 text-sm text-slate-600">
               <div className="rounded-3xl bg-white/80 p-4">
                 <p className="font-semibold text-slate-900">Approval status</p>
-                <p className="mt-2">{user.isApproved ? "Approved and ready for blockchain sync." : "Pending admin approval."}</p>
+                <p className="mt-2">
+                  {isOpenPoll
+                    ? "Not required: this is an open poll."
+                    : user.isApproved
+                      ? "Approved and ready for blockchain sync."
+                      : "Pending admin approval."}
+                </p>
               </div>
               <div className="rounded-3xl bg-white/80 p-4">
                 <p className="font-semibold text-slate-900">Profile wallet</p>

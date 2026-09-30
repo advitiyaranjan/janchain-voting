@@ -98,6 +98,16 @@
       "type": "error"
     },
     {
+      "inputs": [],
+      "name": "EnforcedPause",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "ExpectedPause",
+      "type": "error"
+    },
+    {
       "inputs": [
         {
           "internalType": "uint256",
@@ -115,7 +125,39 @@
     },
     {
       "inputs": [],
+      "name": "InvalidShortString",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "InvalidSignature",
+      "type": "error"
+    },
+    {
+      "inputs": [],
       "name": "InvalidTimeRange",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "deadline",
+          "type": "uint256"
+        }
+      ],
+      "name": "SignatureExpired",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "str",
+          "type": "string"
+        }
+      ],
+      "name": "StringTooLong",
       "type": "error"
     },
     {
@@ -163,6 +205,31 @@
         }
       ],
       "name": "CandidateRegistered",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [],
+      "name": "EIP712DomainChanged",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "electionId",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "bool",
+          "name": "restricted",
+          "type": "bool"
+        }
+      ],
+      "name": "ElectionAccessConfigured",
       "type": "event"
     },
     {
@@ -219,6 +286,44 @@
         }
       ],
       "name": "ElectionEnded",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "electionId",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint48",
+          "name": "previousEndTime",
+          "type": "uint48"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint48",
+          "name": "newEndTime",
+          "type": "uint48"
+        }
+      ],
+      "name": "ElectionExtended",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": false,
+          "internalType": "address",
+          "name": "account",
+          "type": "address"
+        }
+      ],
+      "name": "Paused",
       "type": "event"
     },
     {
@@ -300,6 +405,19 @@
       "anonymous": false,
       "inputs": [
         {
+          "indexed": false,
+          "internalType": "address",
+          "name": "account",
+          "type": "address"
+        }
+      ],
+      "name": "Unpaused",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
           "indexed": true,
           "internalType": "uint256",
           "name": "electionId",
@@ -332,6 +450,31 @@
       "inputs": [
         {
           "indexed": true,
+          "internalType": "uint256",
+          "name": "electionId",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "voter",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "relayer",
+          "type": "address"
+        }
+      ],
+      "name": "VoteRelayed",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
           "internalType": "address",
           "name": "voter",
           "type": "address"
@@ -345,6 +488,19 @@
       ],
       "name": "VoterApprovalUpdated",
       "type": "event"
+    },
+    {
+      "inputs": [],
+      "name": "BALLOT_TYPEHASH",
+      "outputs": [
+        {
+          "internalType": "bytes32",
+          "name": "",
+          "type": "bytes32"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
     },
     {
       "inputs": [],
@@ -422,6 +578,19 @@
       "type": "function"
     },
     {
+      "inputs": [],
+      "name": "approvedVoterCount",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
       "inputs": [
         {
           "internalType": "address",
@@ -448,12 +617,69 @@
           "type": "uint256"
         },
         {
+          "internalType": "address",
+          "name": "voter",
+          "type": "address"
+        }
+      ],
+      "name": "canVote",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "electionId",
+          "type": "uint256"
+        },
+        {
           "internalType": "uint256",
           "name": "candidateId",
           "type": "uint256"
         }
       ],
       "name": "castVote",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "electionId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "candidateId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "voter",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "deadline",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bytes",
+          "name": "signature",
+          "type": "bytes"
+        }
+      ],
+      "name": "castVoteBySig",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"
@@ -494,6 +720,11 @@
           "internalType": "string[]",
           "name": "candidateImageURIs",
           "type": "string[]"
+        },
+        {
+          "internalType": "bool",
+          "name": "restricted",
+          "type": "bool"
         }
       ],
       "name": "createElection",
@@ -505,6 +736,62 @@
         }
       ],
       "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "domainSeparator",
+      "outputs": [
+        {
+          "internalType": "bytes32",
+          "name": "",
+          "type": "bytes32"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "eip712Domain",
+      "outputs": [
+        {
+          "internalType": "bytes1",
+          "name": "fields",
+          "type": "bytes1"
+        },
+        {
+          "internalType": "string",
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "version",
+          "type": "string"
+        },
+        {
+          "internalType": "uint256",
+          "name": "chainId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "verifyingContract",
+          "type": "address"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "salt",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint256[]",
+          "name": "extensions",
+          "type": "uint256[]"
+        }
+      ],
+      "stateMutability": "view",
       "type": "function"
     },
     {
@@ -529,6 +816,24 @@
         }
       ],
       "name": "endElection",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "electionId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint48",
+          "name": "newEndTime",
+          "type": "uint48"
+        }
+      ],
+      "name": "extendElection",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"
@@ -592,6 +897,11 @@
             },
             {
               "internalType": "bool",
+              "name": "restricted",
+              "type": "bool"
+            },
+            {
+              "internalType": "bool",
               "name": "isActive",
               "type": "bool"
             },
@@ -644,6 +954,92 @@
           ],
           "internalType": "struct DecentralizedVoting.CandidateView[]",
           "name": "electionCandidates",
+          "type": "tuple[]"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "offset",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "limit",
+          "type": "uint256"
+        }
+      ],
+      "name": "getElections",
+      "outputs": [
+        {
+          "components": [
+            {
+              "internalType": "uint256",
+              "name": "electionId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "string",
+              "name": "title",
+              "type": "string"
+            },
+            {
+              "internalType": "string",
+              "name": "description",
+              "type": "string"
+            },
+            {
+              "internalType": "string",
+              "name": "metadataURI",
+              "type": "string"
+            },
+            {
+              "internalType": "uint48",
+              "name": "startTime",
+              "type": "uint48"
+            },
+            {
+              "internalType": "uint48",
+              "name": "endTime",
+              "type": "uint48"
+            },
+            {
+              "internalType": "uint16",
+              "name": "candidateCount",
+              "type": "uint16"
+            },
+            {
+              "internalType": "uint96",
+              "name": "totalVotes",
+              "type": "uint96"
+            },
+            {
+              "internalType": "bool",
+              "name": "manuallyEnded",
+              "type": "bool"
+            },
+            {
+              "internalType": "bool",
+              "name": "restricted",
+              "type": "bool"
+            },
+            {
+              "internalType": "bool",
+              "name": "isActive",
+              "type": "bool"
+            },
+            {
+              "internalType": "bool",
+              "name": "hasEnded",
+              "type": "bool"
+            }
+          ],
+          "internalType": "struct DecentralizedVoting.ElectionView[]",
+          "name": "page",
           "type": "tuple[]"
         }
       ],
@@ -770,9 +1166,63 @@
           "internalType": "uint256",
           "name": "electionId",
           "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "candidateId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "voter",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "deadline",
+          "type": "uint256"
+        }
+      ],
+      "name": "hashBallot",
+      "outputs": [
+        {
+          "internalType": "bytes32",
+          "name": "",
+          "type": "bytes32"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "electionId",
+          "type": "uint256"
         }
       ],
       "name": "isElectionActive",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "pause",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "paused",
       "outputs": [
         {
           "internalType": "bool",
@@ -836,6 +1286,13 @@
         }
       ],
       "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "unpause",
+      "outputs": [],
+      "stateMutability": "nonpayable",
       "type": "function"
     }
   ]
