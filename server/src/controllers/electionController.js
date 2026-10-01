@@ -19,6 +19,9 @@ async function findElectionOr404(electionId) {
   if (!election) {
     throw new ApiError(404, "Election not found.");
   }
+  if (!env.contractAddress || election.contractAddress.toLowerCase() !== env.contractAddress.toLowerCase() || election.chainId !== env.chainId) {
+    throw new ApiError(409, "This election belongs to an older contract deployment. Open the current election board.");
+  }
   return election;
 }
 
@@ -101,7 +104,7 @@ async function getPlatformStats(_req, res) {
       activeElections: presented.filter((election) => election.status === "active").length,
       upcomingElections: presented.filter((election) => election.status === "scheduled").length,
       endedElections: presented.filter((election) => election.status === "ended").length,
-      totalVotes: presented.reduce((sum, election) => sum + election.totalVotes, 0),
+      totalVotes: snapshots.every(Boolean) ? presented.reduce((sum, election) => sum + election.totalVotes, 0) : null,
       registeredVoters,
       approvedVoters,
       onChainApprovedVoters: system?.approvedVoterCount ?? null,
@@ -116,13 +119,14 @@ async function getPlatformStats(_req, res) {
 async function getElection(req, res) {
   const election = await findElectionOr404(req.params.electionId);
   const snapshot = await blockchainService.safeGetElectionSnapshot(election.onChainElectionId);
+  const system = await blockchainService.getSystemStatus().catch(() => null);
   const verification =
     req.user?.walletAddress && blockchainService.isConfigured()
       ? await blockchainService.safeGetVoteVerification(election.onChainElectionId, req.user.walletAddress)
       : { hasVoted: false, candidateId: null, transactionHash: null, blockNumber: null, timestamp: null };
 
   res.json({
-    election: presentElection(election, snapshot),
+    election: { ...presentElection(election, snapshot), paused: system?.paused ?? null },
     verification: {
       ...verification,
       candidateName: verification.hasVoted ? candidateName(election, verification.candidateId) : null,
@@ -173,7 +177,9 @@ async function getActivity(req, res) {
     return res.json({ activity: [] });
   }
 
-  const activity = await blockchainService.getVoteActivity(election.onChainElectionId, limit).catch(() => []);
+  const activity = await blockchainService.getVoteActivity(election.onChainElectionId, Math.max(1, limit)).catch(() => {
+    throw new ApiError(503, "Unable to read ballot activity from the blockchain.");
+  });
   res.json({ activity });
 }
 
@@ -219,6 +225,9 @@ async function getMyBallots(req, res) {
       blockchainService.safeGetVoteVerification(election.onChainElectionId, walletAddress)
     )
   );
+  if (receipts.some((receipt) => receipt.available === false)) {
+    throw new ApiError(503, "Unable to read your ballot receipts. Please try again.");
+  }
 
   const ballots = elections
     .map((election, index) => ({ election, receipt: receipts[index] }))

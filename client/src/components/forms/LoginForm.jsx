@@ -28,6 +28,7 @@ function LoginForm({ onSubmit, isLoading = false }) {
           required
           type="email"
           name="email"
+          autoComplete="username"
           value={formState.email}
           onChange={handleChange}
           placeholder="voter@example.com"
@@ -40,6 +41,7 @@ function LoginForm({ onSubmit, isLoading = false }) {
           required
           type="password"
           name="password"
+          autoComplete="current-password"
           value={formState.password}
           onChange={handleChange}
           placeholder="Enter your password"

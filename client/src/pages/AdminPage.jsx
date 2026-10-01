@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { adminApi } from "../api/admin";
 import { electionApi } from "../api/elections";
@@ -41,6 +41,7 @@ function AdminPage() {
   const [selectedUserIds, setSelectedUserIds] = useState([]);
   const [extendingId, setExtendingId] = useState("");
   const [extendValue, setExtendValue] = useState("");
+  const userRequestVersion = useRef(0);
   const deferredUserSearch = useDeferredValue(userSearch);
 
   const loadOverview = useCallback(async () => {
@@ -59,8 +60,10 @@ function AdminPage() {
   }, []);
 
   const loadUsers = useCallback(async () => {
+    const version = ++userRequestVersion.current;
     try {
       const data = await adminApi.listUsers({ q: deferredUserSearch, status: userStatus });
+      if (version !== userRequestVersion.current) return;
       setUsers(data.users);
       setSelectedUserIds((current) => current.filter((id) => data.users.some((user) => user.id === id)));
     } catch (error) {
@@ -79,6 +82,7 @@ function AdminPage() {
   const refreshAll = () => Promise.all([loadOverview(), loadUsers()]);
 
   const runAction = async (actionKey, action) => {
+    if (busyAction) return false;
     setBusyAction(actionKey);
     try {
       const data = await action();
@@ -141,6 +145,10 @@ function AdminPage() {
   };
 
   const handleExtendElection = async (election) => {
+    if (!extendValue || !Number.isFinite(new Date(extendValue).getTime()) || new Date(extendValue) <= new Date(election.endTime)) {
+      toast.error("Choose a valid end time later than the current voting window.");
+      return;
+    }
     const done = await runAction(`extend-${election.id}`, () =>
       adminApi.extendElection(election.id, new Date(extendValue).toISOString())
     );
@@ -174,7 +182,7 @@ function AdminPage() {
   }
 
   if (!dashboard) {
-    return <div className="page-shell text-sm text-slate-500">The admin console could not be loaded.</div>;
+    return <div className="page-shell"><Card role="alert"><p>The admin console could not be loaded.</p><Button className="mt-3" onClick={loadOverview}>Try again</Button></Card></div>;
   }
 
   const { blockchain, metrics } = dashboard;
@@ -197,11 +205,11 @@ function AdminPage() {
               the platform.
             </p>
           </div>
-          {blockchain?.configured && blockchain?.hasServerWallet && blockchain?.paused !== null && (
+          {blockchain?.configured && blockchain?.hasServerWallet && typeof blockchain?.paused === "boolean" && (
             <Button
               variant={blockchain.paused ? "accent" : "danger"}
               onClick={handleTogglePause}
-              disabled={busyAction === "pause"}
+              disabled={Boolean(busyAction)}
             >
               {busyAction === "pause" ? "Updating..." : blockchain.paused ? "Resume voting" : "Pause all voting"}
             </Button>
@@ -284,6 +292,7 @@ function AdminPage() {
 
             <div className="mt-5 space-y-3">
               <Input
+                aria-label="Search voters"
                 value={userSearch}
                 onChange={(event) => setUserSearch(event.target.value)}
                 placeholder="Search name, email, or wallet"
@@ -292,6 +301,7 @@ function AdminPage() {
                 {userFilters.map((filter) => (
                   <button
                     key={filter.value}
+                    aria-pressed={userStatus === filter.value}
                     type="button"
                     onClick={() => setUserStatus(filter.value)}
                     className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
@@ -377,7 +387,7 @@ function AdminPage() {
                         variant="accent"
                         className="px-4 py-2"
                         onClick={() => handleApproval(user.id, true)}
-                        disabled={busyAction === `approval-${user.id}`}
+                        disabled={Boolean(busyAction)}
                       >
                         Approve
                       </Button>
@@ -386,7 +396,7 @@ function AdminPage() {
                         variant="secondary"
                         className="px-4 py-2"
                         onClick={() => handleApproval(user.id, false)}
-                        disabled={busyAction === `approval-${user.id}`}
+                        disabled={Boolean(busyAction)}
                       >
                         Revoke
                       </Button>
@@ -396,7 +406,7 @@ function AdminPage() {
                         variant="ghost"
                         className="px-4 py-2"
                         onClick={() => handleSyncWallet(user.id)}
-                        disabled={busyAction === `sync-${user.id}`}
+                        disabled={Boolean(busyAction)}
                       >
                         {busyAction === `sync-${user.id}`
                           ? "Syncing..."
@@ -440,7 +450,7 @@ function AdminPage() {
                     <h3 className="display-copy mt-3 text-2xl font-semibold text-slate-900">{election.title}</h3>
                     <p className="mt-2 text-sm text-slate-600">{election.description}</p>
                   </div>
-                  <p className="text-sm text-slate-500">{election.totalVotes} votes</p>
+                  <p className="text-sm text-slate-500">{election.onChainAvailable ? `${election.totalVotes} votes` : "Chain unavailable"}</p>
                 </div>
 
                 <div className="mt-4 grid gap-2 text-sm text-slate-500 sm:grid-cols-2">
@@ -464,7 +474,7 @@ function AdminPage() {
                     <Button
                       variant="accent"
                       onClick={() => handleExtendElection(election)}
-                      disabled={!extendValue || busyAction === `extend-${election.id}`}
+                      disabled={!extendValue || Boolean(busyAction)}
                     >
                       {busyAction === `extend-${election.id}` ? "Saving..." : "Save"}
                     </Button>
@@ -476,14 +486,14 @@ function AdminPage() {
 
                 {isOpen && !isExtending && (
                   <div className="mt-5 flex flex-wrap gap-3">
-                    <Button variant="secondary" onClick={() => startExtending(election)}>
+                    <Button variant="secondary" onClick={() => startExtending(election)} disabled={Boolean(busyAction)}>
                       Extend voting window
                     </Button>
                     {election.status === "active" && (
                       <Button
                         variant="danger"
                         onClick={() => handleEndElection(election)}
-                        disabled={busyAction === `end-${election.id}`}
+                        disabled={Boolean(busyAction)}
                       >
                         {busyAction === `end-${election.id}` ? "Ending..." : "End election now"}
                       </Button>

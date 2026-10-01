@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { electionApi } from "../api/elections";
@@ -26,29 +26,43 @@ function ResultsPage() {
   const [lookupAddress, setLookupAddress] = useState(user?.walletAddress || "");
   const [loading, setLoading] = useState(true);
   const [verifying, setVerifying] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [activityUnavailable, setActivityUnavailable] = useState(false);
+  const requestVersion = useRef(0);
+  const verificationVersion = useRef(0);
 
   const loadResults = useCallback(
     async ({ silent = false } = {}) => {
+      const version = ++requestVersion.current;
       try {
         const [resultData, activityData] = await Promise.all([
           electionApi.getResults(electionId),
-          electionApi.getActivity(electionId).catch(() => ({ activity: [] })),
+          electionApi.getActivity(electionId).catch(() => ({ activity: [], unavailable: true })),
         ]);
+        if (version !== requestVersion.current) return;
         setResults(resultData);
         setActivity(activityData.activity);
+        setActivityUnavailable(Boolean(activityData.unavailable));
+        setErrorMessage("");
       } catch (error) {
+        if (version !== requestVersion.current) return;
+        setErrorMessage(error.response?.data?.message || error.message);
         if (!silent) {
           toast.error(error.response?.data?.message || error.message);
         }
       } finally {
-        setLoading(false);
+        if (version === requestVersion.current) setLoading(false);
       }
     },
     [electionId]
   );
 
   useEffect(() => {
+    setResults(null);
+    setVerification(null);
+    setLoading(true);
     loadResults();
+    return () => { requestVersion.current += 1; verificationVersion.current += 1; };
   }, [loadResults]);
 
   const isLive = results?.election.status === "active";
@@ -63,6 +77,8 @@ function ResultsPage() {
   }, [isLive, loadResults]);
 
   useEffect(() => {
+    let cancelled = false;
+    const version = ++verificationVersion.current;
     if (!user?.walletAddress) {
       return;
     }
@@ -70,8 +86,9 @@ function ResultsPage() {
     setLookupAddress(user.walletAddress);
     electionApi
       .verifyVote(electionId, user.walletAddress)
-      .then((data) => setVerification(data.verification))
+      .then((data) => { if (!cancelled && version === verificationVersion.current) setVerification(data.verification); })
       .catch(() => {});
+    return () => { cancelled = true; };
   }, [electionId, user?.walletAddress]);
 
   const handleVerify = async () => {
@@ -81,9 +98,11 @@ function ResultsPage() {
     }
 
     setVerifying(true);
+    setVerification(null);
+    const version = ++verificationVersion.current;
     try {
       const data = await electionApi.verifyVote(electionId, lookupAddress.trim());
-      setVerification(data.verification);
+      if (version === verificationVersion.current) setVerification(data.verification);
     } catch (error) {
       toast.error(error.response?.data?.message || error.message);
     } finally {
@@ -96,7 +115,7 @@ function ResultsPage() {
   }
 
   if (!results) {
-    return <div className="page-shell text-sm text-slate-500">Results unavailable.</div>;
+    return <div className="page-shell"><Card role="alert"><h1 className="text-xl font-semibold">Results unavailable</h1><p className="mt-2 text-sm">{errorMessage}</p><Button className="mt-4" onClick={() => loadResults()}>Try again</Button></Card></div>;
   }
 
   const { election } = results;
@@ -117,6 +136,7 @@ function ResultsPage() {
 
   return (
     <div className="page-shell space-y-6">
+      {errorMessage && <Card role="alert" className="text-amber-800">Live refresh failed. These results were last read at {formatDateTime(results.results.fetchedAt)}. <Button variant="secondary" onClick={() => loadResults()}>Retry</Button></Card>}
       <Card className="hero-grid p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-3xl">
@@ -149,7 +169,7 @@ function ResultsPage() {
         <div className="space-y-6">
           <Card>
             <h2 className="display-copy text-2xl font-semibold text-slate-900">
-              {hasEnded ? "Final results" : "Live results"}
+              {hasEnded ? "Final results" : election.status === "scheduled" ? "Election has not started" : "Live results"}
             </h2>
             <div className="mt-6">
               <ResultBars candidates={results.results.candidates} totalVotes={totalVotes} />
@@ -161,7 +181,7 @@ function ResultsPage() {
             <p className="mt-2 text-sm text-slate-500">
               The latest ballots read straight from contract events. Voters appear only as wallet addresses.
             </p>
-            {activity.length === 0 ? (
+            {activityUnavailable ? <p role="alert" className="mt-5 text-sm text-amber-800">Ballot activity is unavailable. Refresh to try again.</p> : activity.length === 0 ? (
               <p className="mt-5 text-sm text-slate-500">No ballots have been cast yet.</p>
             ) : (
               <div className="mt-5 overflow-x-auto">
@@ -231,7 +251,7 @@ function ResultsPage() {
               Enter any wallet address to confirm whether it voted in this election.
             </p>
             <div className="mt-5 space-y-3">
-              <Input value={lookupAddress} onChange={(event) => setLookupAddress(event.target.value)} placeholder="0x..." />
+              <Input aria-label="Wallet address to verify" value={lookupAddress} onChange={(event) => { setLookupAddress(event.target.value); setVerification(null); verificationVersion.current += 1; }} placeholder="0x..." spellCheck={false} />
               <Button className="w-full" onClick={handleVerify} disabled={verifying}>
                 {verifying ? "Verifying..." : "Verify wallet on-chain"}
               </Button>

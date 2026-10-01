@@ -7,7 +7,7 @@ import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import { useAuth } from "../context/AuthContext";
 import { useWallet } from "../hooks/useWallet";
-import { castVote, describeVoteError, signBallot } from "../lib/contract";
+import { castVote, describeVoteError, signBallot, validateBallotDomain } from "../lib/contract";
 import { buildExplorerUrl, formatDateTime, shortenAddress, shortenHash } from "../lib/utils";
 
 function getVotingStatusMessage({
@@ -26,6 +26,8 @@ function getVotingStatusMessage({
       ? `Your vote has already been recorded for ${verification.candidateName}.`
       : "Your vote has already been recorded on-chain.";
   }
+  if (!election.onChainAvailable) return "Blockchain data is unavailable. Refresh before voting.";
+  if (election.paused) return "Voting is temporarily paused on-chain.";
 
   if (election.status !== "active") {
     return "Voting opens only while the election is active.";
@@ -73,12 +75,15 @@ function VotingPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [linkingWallet, setLinkingWallet] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const walletVerified = Boolean(user.walletAddress && user.linkedWalletAt);
 
   const loadElection = useCallback(async () => {
     setLoading(true);
+    setErrorMessage("");
     try {
       const data = await electionApi.getById(electionId);
+      if (data.ballot) validateBallotDomain(data.ballot.domain);
       setElection(data.election);
       setVerification(data.verification);
       setBallotConfig(data.ballot);
@@ -86,13 +91,16 @@ function VotingPage() {
         setMethod("direct");
       }
     } catch (error) {
-      toast.error(error.response?.data?.message || error.message);
+      setElection(null);
+      setErrorMessage(error.response?.data?.message || error.message);
     } finally {
       setLoading(false);
     }
   }, [electionId]);
 
   useEffect(() => {
+    setSelectedCandidateId(null);
+    setReceipt(null);
     loadElection();
   }, [loadElection]);
 
@@ -115,6 +123,8 @@ function VotingPage() {
       walletMatchesProfile &&
       wallet.isExpectedNetwork &&
       election?.status === "active" &&
+      election?.onChainAvailable &&
+      election?.paused === false &&
       !verification?.hasVoted
   );
 
@@ -181,6 +191,7 @@ function VotingPage() {
   };
 
   const handleVote = async () => {
+    if (!canSubmitVote || submitting) return;
     setSubmitting(true);
     try {
       const connectedWallet = wallet.walletAddress || (await wallet.connectWallet());
@@ -211,7 +222,7 @@ function VotingPage() {
         });
         setReceipt(data.receipt);
       } else {
-        const result = await castVote(election.onChainElectionId, selectedCandidateId);
+        const result = await castVote(election.onChainElectionId, selectedCandidateId, connectedWallet);
         setReceipt({
           candidateName: candidate?.name || null,
           candidateId: selectedCandidateId,
@@ -236,7 +247,7 @@ function VotingPage() {
   }
 
   if (!election) {
-    return <div className="page-shell text-sm text-slate-500">Election not found.</div>;
+    return <div className="page-shell"><Card role="alert"><h1 className="text-xl font-semibold">Unable to open this election</h1><p className="mt-3 text-sm">{errorMessage || "Election not found."}</p><Button className="mt-4" onClick={loadElection}>Try again</Button><Link className="ml-4 text-sm" to="/elections">Back to elections</Link></Card></div>;
   }
 
   return (
@@ -263,7 +274,7 @@ function VotingPage() {
 
       <div className="grid gap-6 lg:grid-cols-[1fr_0.42fr]">
         <Card>
-          <div className="mb-6 flex items-center justify-between">
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="display-copy text-2xl font-semibold text-slate-900">Choose a candidate</h2>
               <p className="text-sm text-slate-500">
@@ -275,17 +286,18 @@ function VotingPage() {
             </Link>
           </div>
 
-          <div className="space-y-4">
+          <fieldset className="space-y-4" disabled={submitting || verification?.hasVoted || election.status !== "active"}>
+            <legend className="sr-only">Choose one candidate</legend>
             {election.candidates.map((candidate) => {
               const isSelected = selectedCandidateId === candidate.candidateId;
               return (
-                <button
+                <label
                   key={candidate.candidateId}
-                  className={`w-full rounded-3xl border p-5 text-left transition ${
+                  className={`block w-full cursor-pointer rounded-3xl border p-5 text-left transition ${
                     isSelected ? "border-[var(--teal)] bg-teal-50" : "border-slate-200 bg-white/80 hover:bg-white"
                   }`}
-                  onClick={() => setSelectedCandidateId(candidate.candidateId)}
                 >
+                  <input className="mr-3 accent-teal-700" type="radio" name="candidate" checked={isSelected} onChange={() => setSelectedCandidateId(candidate.candidateId)} aria-label={candidate.name} />
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <h3 className="display-copy text-2xl font-semibold text-slate-900">{candidate.name}</h3>
@@ -296,10 +308,10 @@ function VotingPage() {
                     <Badge variant="neutral">{candidate.voteCount} votes</Badge>
                   </div>
                   {candidate.description && <p className="mt-3 text-sm leading-6 text-slate-600">{candidate.description}</p>}
-                </button>
+                </label>
               );
             })}
-          </div>
+          </fieldset>
 
           {!verification?.hasVoted && election.status === "active" && (
             <fieldset className="mt-6">
@@ -337,7 +349,7 @@ function VotingPage() {
                       name="voteMethod"
                       value={option.value}
                       checked={method === option.value}
-                      disabled={option.disabled}
+                      disabled={option.disabled || submitting}
                       onChange={() => setMethod(option.value)}
                     />
                     <span className="block font-semibold text-slate-900">{option.label}</span>
@@ -361,7 +373,7 @@ function VotingPage() {
             )}
             {!walletVerified && (
               <Button variant="accent" onClick={handleLinkWallet} disabled={linkingWallet}>
-                {linkingWallet ? "Verifying wallet..." : user.walletAddress ? "Verify saved wallet" : "Link wallet"}
+                {linkingWallet ? "Verifying wallet..." : user.walletAddress || user.pendingWalletAddress ? "Verify wallet ownership" : "Link wallet"}
               </Button>
             )}
             <Button disabled={submitting || !canSubmitVote} onClick={handleVote}>
@@ -376,7 +388,9 @@ function VotingPage() {
                     : "Cast vote on-chain"}
             </Button>
           </div>
-          <p className="mt-4 text-sm text-slate-500">{votingStatusMessage}</p>
+          {selectedCandidateId && <p className="mt-4 rounded-2xl bg-teal-50 p-4 text-sm text-teal-900">Review: <strong>{election.candidates.find((candidate) => candidate.candidateId === selectedCandidateId)?.name}</strong>. Your choice and wallet will be public and cannot be changed after confirmation.</p>}
+          <p role="status" className="mt-4 text-sm text-slate-600">{votingStatusMessage}</p>
+          <Button variant="ghost" className="mt-2" onClick={loadElection} disabled={submitting}>Refresh eligibility</Button>
 
           {receipt && (
             <div className="mt-6 rounded-3xl border border-emerald-200 bg-emerald-50 p-5 text-sm text-emerald-900">
@@ -415,7 +429,7 @@ function VotingPage() {
               </div>
               <div className="rounded-3xl bg-white/80 p-4">
                 <p className="font-semibold text-slate-900">Profile wallet</p>
-                <p className="mt-2">{shortenAddress(user.walletAddress)}</p>
+                <p className="mt-2">{shortenAddress(user.walletAddress || user.pendingWalletAddress)}</p>
               </div>
               <div className="rounded-3xl bg-white/80 p-4">
                 <p className="font-semibold text-slate-900">Wallet verification</p>

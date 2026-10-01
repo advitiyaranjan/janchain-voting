@@ -12,12 +12,12 @@ function signToken(user) {
       preferredLanguage: user.preferredLanguage || "en",
     },
     env.jwtSecret,
-    { expiresIn: env.jwtExpiresIn }
+    { expiresIn: env.jwtExpiresIn, algorithm: "HS256", issuer: "janchain-voting", audience: "janchain-client" }
   );
 }
 
 function verifyToken(token) {
-  return jwt.verify(token, env.jwtSecret);
+  return jwt.verify(token, env.jwtSecret, { algorithms: ["HS256"], issuer: "janchain-voting", audience: "janchain-client" });
 }
 
 module.exports = {

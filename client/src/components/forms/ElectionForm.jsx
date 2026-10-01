@@ -30,6 +30,7 @@ const categorySuggestions = ["General", "Student Council", "Governance", "Commun
 
 function ElectionForm({ onSubmit, isLoading = false }) {
   const [formState, setFormState] = useState(initialState);
+  const [error, setError] = useState("");
 
   const updateField = (name, value) => {
     setFormState((current) => ({ ...current, [name]: value }));
@@ -60,6 +61,17 @@ function ElectionForm({ onSubmit, isLoading = false }) {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    setError("");
+    if (new Date(formState.startTime).getTime() <= Date.now() + 60000) {
+      setError("Choose a start time at least one minute ahead so the creation transaction can confirm.");
+      return;
+    }
+    if (new Date(formState.endTime) <= new Date(formState.startTime)) {
+      setError("End time must be after start time.");
+      return;
+    }
+    const names = formState.candidates.map((candidate) => candidate.name.trim().toLowerCase());
+    if (new Set(names).size !== names.length) { setError("Each candidate needs a unique name."); return; }
     const created = await onSubmit({
       ...formState,
       startTime: new Date(formState.startTime).toISOString(),
@@ -75,11 +87,16 @@ function ElectionForm({ onSubmit, isLoading = false }) {
 
   return (
     <form className="space-y-5" onSubmit={handleSubmit}>
+      {error && <p role="alert" className="rounded-2xl bg-rose-50 p-4 text-sm text-rose-800">{error}</p>}
+      <fieldset disabled={isLoading} className="space-y-5">
+      <legend className="sr-only">Election details</legend>
       <div className="grid gap-4 md:grid-cols-2">
         <label className="block space-y-2 text-sm font-medium text-slate-700 md:col-span-2">
           <span>Election title</span>
           <Input
             required
+            minLength={5}
+            maxLength={120}
             value={formState.title}
             onChange={(event) => updateField("title", event.target.value)}
             placeholder="2026 National Students Council"
@@ -90,6 +107,8 @@ function ElectionForm({ onSubmit, isLoading = false }) {
           <span>Description</span>
           <Textarea
             required
+            minLength={12}
+            maxLength={2000}
             value={formState.description}
             onChange={(event) => updateField("description", event.target.value)}
             placeholder="Explain the scope, eligibility, and decision being voted on."
@@ -155,6 +174,7 @@ function ElectionForm({ onSubmit, isLoading = false }) {
             required
             type="datetime-local"
             value={formState.endTime}
+            min={formState.startTime || undefined}
             onChange={(event) => updateField("endTime", event.target.value)}
           />
         </label>
@@ -166,7 +186,7 @@ function ElectionForm({ onSubmit, isLoading = false }) {
             <h3 className="display-copy text-lg font-semibold text-slate-900">Candidates</h3>
             <p className="text-sm text-slate-500">Add at least two options. Candidate images are optional.</p>
           </div>
-          <Button variant="secondary" onClick={addCandidate}>
+          <Button variant="secondary" onClick={addCandidate} disabled={formState.candidates.length >= 20}>
             Add candidate
           </Button>
         </div>
@@ -188,6 +208,8 @@ function ElectionForm({ onSubmit, isLoading = false }) {
                   <span>Name</span>
                   <Input
                     required
+                    minLength={2}
+                    maxLength={80}
                     value={candidate.name}
                     onChange={(event) => updateCandidate(index, "name", event.target.value)}
                   />
@@ -225,6 +247,8 @@ function ElectionForm({ onSubmit, isLoading = false }) {
           ))}
         </div>
       </div>
+
+      </fieldset>
 
       <Button className="w-full" variant="accent" disabled={isLoading} type="submit">
         {isLoading ? "Publishing election..." : "Create election"}

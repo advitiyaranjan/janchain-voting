@@ -1,23 +1,29 @@
+import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import AppShell from "./components/layout/AppShell";
 import AdminRoute from "./routes/AdminRoute";
 import ProtectedRoute from "./routes/ProtectedRoute";
-import AdminPage from "./pages/AdminPage";
-import AuthPage from "./pages/AuthPage";
-import DashboardPage from "./pages/DashboardPage";
-import ElectionListPage from "./pages/ElectionListPage";
 import HomePage from "./pages/HomePage";
 import NotFoundPage from "./pages/NotFoundPage";
-import ResultsPage from "./pages/ResultsPage";
-import VotingPage from "./pages/VotingPage";
+const AdminPage = lazy(() => import("./pages/AdminPage"));
+const AuthPage = lazy(() => import("./pages/AuthPage"));
+const DashboardPage = lazy(() => import("./pages/DashboardPage"));
+const ElectionListPage = lazy(() => import("./pages/ElectionListPage"));
+const ResultsPage = lazy(() => import("./pages/ResultsPage"));
+const VotingPage = lazy(() => import("./pages/VotingPage"));
+const ChainPage = lazy(() => import("./pages/ChainPage"));
+const HelpPage = lazy(() => import("./pages/HelpPage"));
 
 function App() {
   return (
     <AppShell>
+      <Suspense fallback={<div className="page-shell" role="status">Loading page…</div>}>
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<AuthPage />} />
         <Route path="/elections" element={<ElectionListPage />} />
+        <Route path="/chain" element={<ChainPage />} />
+        <Route path="/help" element={<HelpPage />} />
         <Route path="/results/:electionId" element={<ResultsPage />} />
         <Route
           path="/dashboard"
@@ -46,6 +52,7 @@ function App() {
         <Route path="/home" element={<Navigate to="/" replace />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
+      </Suspense>
     </AppShell>
   );
 }

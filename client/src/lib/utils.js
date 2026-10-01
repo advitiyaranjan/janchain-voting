@@ -5,6 +5,7 @@ export function cn(...values) {
 }
 
 export function formatDateTime(value) {
+  if (value == null || !Number.isFinite(new Date(value).getTime())) return "Unavailable";
   return new Intl.DateTimeFormat("en-IN", {
     dateStyle: "medium",
     timeStyle: "short",

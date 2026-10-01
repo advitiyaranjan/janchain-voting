@@ -192,7 +192,6 @@ async function createElection(req, res) {
     chainId: env.chainId,
     contractAddress: env.contractAddress,
     candidates,
-    createdBy: req.user.email,
     createdAt: new Date().toISOString(),
   };
 
@@ -289,6 +288,10 @@ async function endElection(req, res) {
     throw new ApiError(404, "Election not found.");
   }
 
+  if (election.contractAddress.toLowerCase() !== env.contractAddress.toLowerCase() || election.chainId !== env.chainId) {
+    throw new ApiError(409, "This election belongs to a different contract deployment.");
+  }
+
   const blockchainResult = await blockchainService.endElection(election.onChainElectionId);
   election.status = "ended";
   election.endedAt = new Date();
@@ -308,6 +311,9 @@ async function extendElection(req, res) {
 
   if (!election) {
     throw new ApiError(404, "Election not found.");
+  }
+  if (election.contractAddress.toLowerCase() !== env.contractAddress.toLowerCase() || election.chainId !== env.chainId) {
+    throw new ApiError(409, "This election belongs to a different contract deployment.");
   }
 
   if (new Date(endTime) <= new Date(election.endTime)) {

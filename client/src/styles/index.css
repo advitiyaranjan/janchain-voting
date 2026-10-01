@@ -30,6 +30,30 @@ body {
   background: var(--background);
 }
 
+html { scroll-behavior: smooth; scroll-padding-top: 9rem; }
+button, input, select, textarea { font: inherit; }
+button, select { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--teal); outline-offset: 4px; }
+input:focus-visible, textarea:focus-visible { outline-offset: 1px; }
+input, textarea, select { min-width: 0; }
+button, a, input, select { -webkit-tap-highlight-color: transparent; }
+h1, h2, h3, p { overflow-wrap: anywhere; }
+.grid > *, .flex > * { min-width: 0; }
+.skip-link { position: fixed; top: -5rem; left: 1rem; z-index: 100; padding: .8rem 1rem; background: white; border-radius: .5rem; }
+.skip-link:focus { top: 1rem; }
+nav a[aria-current="page"] { background: var(--ink); color: white; font-weight: 700; }
+nav > a, nav > button { flex-shrink: 0; }
+label:has(input[type="radio"]:focus-visible) { outline: 3px solid var(--teal); outline-offset: 3px; }
+@media (max-width: 640px) {
+  .surface-card, .surface-strong { border-radius: 1.25rem; }
+  .surface-card.p-8, .surface-strong.p-8 { padding: 1.25rem; }
+  .text-4xl { font-size: 1.875rem; line-height: 1.2; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+
 a {
   color: inherit;
   text-decoration: none;
@@ -67,5 +91,5 @@ a {
 
 .soft-ring {
   @apply ring-1 ring-inset;
-  ring-color: rgba(16, 35, 61, 0.08);
+  --tw-ring-color: rgba(16, 35, 61, 0.08);
 }

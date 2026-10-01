@@ -5,6 +5,7 @@ const User = require("../models/User");
 const ApiError = require("../utils/ApiError");
 const { signToken } = require("../utils/jwt");
 const blockchainService = require("../services/blockchainService");
+const env = require("../config/env");
 
 function buildAuthResponse(user) {
   return {
@@ -16,6 +17,9 @@ function buildAuthResponse(user) {
 function buildWalletMessage({ walletAddress, nonce, intent }) {
   return [
     "JanChain Voting wallet verification",
+    `Application: ${env.clientUrl}`,
+    `Chain ID: ${env.chainId}`,
+    "This message verifies wallet ownership. It does not authorize a transaction.",
     `Intent: ${intent}`,
     `Wallet: ${walletAddress}`,
     `Nonce: ${nonce}`,
@@ -25,13 +29,7 @@ function buildWalletMessage({ walletAddress, nonce, intent }) {
 async function register(req, res) {
   const { fullName, email, password, walletAddress, preferredLanguage } = req.validated.body;
   const normalizedWallet = walletAddress?.toLowerCase();
-  const orFilters = [{ email: email.toLowerCase() }];
-
-  if (normalizedWallet) {
-    orFilters.push({ walletAddress: normalizedWallet });
-  }
-
-  const existingUser = await User.findOne({ $or: orFilters });
+  const existingUser = await User.findOne({ email: email.toLowerCase() });
   if (existingUser) {
     throw new ApiError(409, "A user with that email or wallet already exists.");
   }
@@ -41,7 +39,8 @@ async function register(req, res) {
     fullName,
     email: email.toLowerCase(),
     passwordHash,
-    walletAddress: normalizedWallet,
+    // An unproven address must not reserve another person's wallet.
+    pendingWalletAddress: normalizedWallet,
     preferredLanguage: preferredLanguage || "en",
   });
 
@@ -87,6 +86,9 @@ async function issueWalletChallenge(req, res) {
       throw new ApiError(401, "You must be logged in to link a wallet.");
     }
     user = req.user;
+    if (user.linkedWalletAt && user.walletAddress !== normalizedWallet) {
+      throw new ApiError(409, "This account already has a verified wallet. Contact the administrator before changing it.");
+    }
   } else {
     user = await User.findOne({
       walletAddress: normalizedWallet,
@@ -142,7 +144,12 @@ async function verifyWalletChallenge(req, res) {
     throw new ApiError(400, "Wallet challenge has expired.");
   }
 
-  const recoveredAddress = ethers.verifyMessage(user.walletChallenge.message, signature).toLowerCase();
+  let recoveredAddress;
+  try {
+    recoveredAddress = ethers.verifyMessage(user.walletChallenge.message, signature).toLowerCase();
+  } catch (_error) {
+    throw new ApiError(401, "Wallet signature verification failed.");
+  }
   if (recoveredAddress !== normalizedWallet) {
     throw new ApiError(401, "Wallet signature verification failed.");
   }
@@ -154,16 +161,34 @@ async function verifyWalletChallenge(req, res) {
     });
 
     if (existingOwner) {
-      throw new ApiError(409, "That wallet is already linked to another account.");
+      if (existingOwner.linkedWalletAt) {
+        throw new ApiError(409, "That wallet is already linked to another account.");
+      }
+      // Release legacy registration claims only while they remain unverified.
+      await User.updateOne({ _id: existingOwner._id, linkedWalletAt: null, walletAddress: normalizedWallet }, {
+        $set: { pendingWalletAddress: normalizedWallet }, $unset: { walletAddress: 1 },
+      });
     }
 
-    user.walletAddress = normalizedWallet;
-    user.linkedWalletAt = new Date();
+    if (user.linkedWalletAt && user.walletAddress !== normalizedWallet) {
+      throw new ApiError(409, "This account already has a verified wallet.");
+    }
   }
 
-  user.walletChallenge = undefined;
-  user.lastLoginAt = new Date();
-  await user.save();
+  // Consume the nonce atomically: two concurrent verification requests cannot reuse it.
+  const updates = { lastLoginAt: new Date() };
+  if (intent === "link") {
+    updates.walletAddress = normalizedWallet;
+    updates.linkedWalletAt = user.linkedWalletAt || new Date();
+  }
+  user = await User.findOneAndUpdate({
+    _id: user._id,
+    "walletChallenge.nonce": user.walletChallenge.nonce,
+    "walletChallenge.address": normalizedWallet,
+    "walletChallenge.intent": intent,
+    "walletChallenge.expiresAt": { $gt: new Date() },
+  }, { $set: updates, $unset: { walletChallenge: 1, ...(intent === "link" ? { pendingWalletAddress: 1 } : {}) } }, { new: true, runValidators: true });
+  if (!user) throw new ApiError(401, "The wallet challenge has expired or was already used. Request a new one.");
 
   let blockchainWarning = null;
   if (user.isApproved && user.walletAddress && blockchainService.isConfigured()) {

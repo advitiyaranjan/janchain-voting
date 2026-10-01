@@ -14,7 +14,8 @@ const registerSchema = z.object({
       .min(8)
       .regex(/[A-Z]/, "Password must include an uppercase letter.")
       .regex(/[a-z]/, "Password must include a lowercase letter.")
-      .regex(/[0-9]/, "Password must include a number."),
+      .regex(/[0-9]/, "Password must include a number.")
+      .refine((value) => Buffer.byteLength(value, "utf8") <= 72, "Password must be at most 72 bytes."),
     walletAddress: walletAddress.optional(),
     preferredLanguage: z.string().trim().min(2).max(10).optional(),
   }),

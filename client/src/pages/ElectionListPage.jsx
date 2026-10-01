@@ -1,6 +1,5 @@
-import { startTransition, useDeferredValue, useEffect, useState } from "react";
+import { useDeferredValue, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { toast } from "sonner";
 import { electionApi } from "../api/elections";
 import Badge from "../components/ui/Badge";
 import Button from "../components/ui/Button";
@@ -15,20 +14,26 @@ function ElectionListPage() {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [elections, setElections] = useState([]);
+  const [error, setError] = useState("");
+  const [retry, setRetry] = useState(0);
   const deferredSearch = useDeferredValue(search);
 
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
+    setError("");
     electionApi
       .list({ q: deferredSearch, status, category })
       .then((data) => {
+        if (cancelled) return;
         setElections(data.elections);
         // A filtered response only lists matching categories, so keep every one seen so far.
         setCategories((current) => [...new Set([...current, ...data.categories])].sort());
       })
-      .catch((error) => toast.error(error.response?.data?.message || error.message))
-      .finally(() => setLoading(false));
-  }, [deferredSearch, status, category]);
+      .catch((error) => { if (!cancelled) setError(error.response?.data?.message || error.message); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [deferredSearch, status, category, retry]);
 
   return (
     <div className="page-shell space-y-6">
@@ -41,10 +46,11 @@ function ElectionListPage() {
         </p>
         <div className="mt-6 grid gap-4 md:grid-cols-[1fr_auto]">
           <Input
+            aria-label="Search elections or candidates"
             value={search}
             onChange={(event) => {
               const value = event.target.value;
-              startTransition(() => setSearch(value));
+              setSearch(value);
             }}
             placeholder="Search elections or candidates"
           />
@@ -52,6 +58,7 @@ function ElectionListPage() {
             {["all", "scheduled", "active", "ended"].map((value) => (
               <Button
                 key={value}
+                aria-pressed={status === value}
                 variant={status === value ? "primary" : "secondary"}
                 className="px-4 py-3 capitalize"
                 onClick={() => setStatus(value)}
@@ -66,6 +73,7 @@ function ElectionListPage() {
             {["all", ...categories].map((value) => (
               <button
                 key={value}
+                aria-pressed={category === value}
                 type="button"
                 onClick={() => setCategory(value)}
                 className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
@@ -79,7 +87,7 @@ function ElectionListPage() {
         )}
       </Card>
 
-      {loading ? (
+      {error ? <Card role="alert"><h2 className="font-semibold">Election board unavailable</h2><p className="mt-2 text-sm">{error}</p><div className="mt-4 flex flex-wrap gap-3"><Button onClick={() => setRetry((value) => value + 1)}>Try again</Button><Link to="/chain" className="py-3 text-sm font-semibold text-[var(--teal)]">Browse directly on-chain →</Link></div></Card> : loading ? (
         <Card>Loading election board...</Card>
       ) : elections.length === 0 ? (
         <Card className="text-sm text-slate-500">No elections match these filters yet.</Card>
@@ -101,7 +109,7 @@ function ElectionListPage() {
                     <p className="mt-3 text-sm leading-6 text-slate-600">{election.description}</p>
                   </div>
                   <div className="rounded-2xl bg-white/80 px-4 py-3 text-right text-sm text-slate-500">
-                    <p>{election.totalVotes} votes</p>
+                    <p>{election.onChainAvailable ? `${election.totalVotes} votes` : "Chain unavailable"}</p>
                     <p>{election.candidates.length} candidates</p>
                   </div>
                 </div>
@@ -112,12 +120,8 @@ function ElectionListPage() {
                 </div>
 
                 <div className="mt-6 flex flex-wrap gap-3">
-                  <Link to={`/elections/${electionId}`}>
-                    <Button>Open voting page</Button>
-                  </Link>
-                  <Link to={`/results/${electionId}`}>
-                    <Button variant="secondary">View results</Button>
-                  </Link>
+                  <Button as={Link} to={`/elections/${electionId}`}>Open voting page</Button>
+                  <Button as={Link} to={`/results/${electionId}`} variant="secondary">View results</Button>
                 </div>
               </Card>
             );

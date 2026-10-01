@@ -2,29 +2,43 @@
   "name": "janchain-voting",
   "version": "1.0.0",
   "private": true,
+  "engines": { "node": ">=20.19.0" },
   "workspaces": [
     "client",
     "server"
   ],
   "scripts": {
+    "setup:local": "node scripts/setup-local.js",
+    "doctor": "node scripts/doctor.js",
+    "check": "npm run compile && npm run lint && npm test && npm run test --workspace server && npm run test --workspace client && npm run build:client",
+    "dev": "node scripts/dev.js",
+    "dev:db": "node scripts/local-db.js",
     "dev:client": "npm run dev --workspace client",
     "dev:server": "npm run dev --workspace server",
     "build:client": "npm run build --workspace client",
     "lint": "npm run lint --workspace client && npm run lint --workspace server",
     "compile": "hardhat compile",
     "test": "hardhat test",
-    "node": "hardhat node",
+    "node": "hardhat node --hostname 127.0.0.1",
     "deploy:localhost": "hardhat run scripts/deploy.js --network localhost",
     "deploy:sepolia": "hardhat run scripts/deploy.js --network sepolia",
     "deploy:amoy": "hardhat run scripts/deploy.js --network amoy",
     "sync:abi": "node scripts/export-artifacts.js",
-    "seed": "npm run seed --workspace server"
+    "seed": "npm run seed --workspace server",
+    "seed:missing": "npm run seed --workspace server -- --if-missing",
+    "smoke:local": "node scripts/smoke-local.js"
+  },
+  "overrides": {
+    "express": {
+      "qs": "^6.16.0"
+    }
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
     "@openzeppelin/contracts": "^5.0.2",
     "dotenv": "^16.4.5",
     "ethereum-cryptography": "2.2.1",
-    "hardhat": "^2.22.18"
+    "hardhat": "^2.22.18",
+    "mongodb-memory-server-core": "^11.3.0"
   }
 }

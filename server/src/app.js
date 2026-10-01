@@ -3,6 +3,7 @@ const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
 const rateLimit = require("express-rate-limit");
+const mongoose = require("mongoose");
 const env = require("./config/env");
 const { authenticate } = require("./middleware/authenticate");
 const authorize = require("./middleware/authorize");
@@ -36,6 +37,14 @@ app.get("/api/health", (_req, res) => {
     status: "ok",
     service: "janchain-voting-api",
     timestamp: new Date().toISOString(),
+  });
+});
+
+app.get("/api/ready", (_req, res) => {
+  const connected = mongoose.connection.readyState === 1;
+  res.status(connected ? 200 : 503).json({
+    status: connected ? "ready" : "unavailable",
+    database: connected ? "connected" : "disconnected",
   });
 });
 

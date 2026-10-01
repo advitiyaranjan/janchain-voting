@@ -26,6 +26,8 @@ module.exports = {
   networks: {
     hardhat: {
       chainId: 31337,
+      // Keep scheduled demo elections moving without changing unit-test mining.
+      mining: { auto: true, interval: process.argv.includes("node") ? 3000 : 0 },
     },
     localhost: {
       url: "http://127.0.0.1:8545",

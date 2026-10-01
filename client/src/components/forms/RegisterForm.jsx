@@ -32,6 +32,9 @@ function RegisterForm({ onSubmit, isLoading = false }) {
         <Input
           required
           name="fullName"
+          autoComplete="name"
+          minLength={3}
+          maxLength={120}
           value={formState.fullName}
           onChange={handleChange}
           placeholder="Ananya Rao"
@@ -44,6 +47,7 @@ function RegisterForm({ onSubmit, isLoading = false }) {
           required
           type="email"
           name="email"
+          autoComplete="email"
           value={formState.email}
           onChange={handleChange}
           placeholder="voter@example.com"
@@ -56,9 +60,14 @@ function RegisterForm({ onSubmit, isLoading = false }) {
           required
           type="password"
           name="password"
+          autoComplete="new-password"
+          minLength={8}
+          maxLength={72}
+          pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{8,}"
+          title="Use at least 8 characters with an uppercase letter, a lowercase letter, and a number."
           value={formState.password}
           onChange={handleChange}
-          placeholder="Minimum 8 characters"
+          placeholder="8+ characters, uppercase, lowercase, number"
         />
       </label>
 
@@ -66,6 +75,9 @@ function RegisterForm({ onSubmit, isLoading = false }) {
         <span>Wallet address (optional)</span>
         <Input
           name="walletAddress"
+          pattern="0x[a-fA-F0-9]{40}"
+          spellCheck={false}
+          autoComplete="off"
           value={formState.walletAddress}
           onChange={handleChange}
           placeholder="0x..."

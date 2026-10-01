@@ -5,12 +5,13 @@ function notFoundHandler(_req, res) {
 }
 
 function errorHandler(error, _req, res, _next) {
-  const statusCode = error.statusCode || 500;
+  const statusCode = error.code === 11000 ? 409 : error.statusCode || error.status || 500;
   const payload = {
-    message: error.message || "Internal server error.",
+    message: error.code === 11000 ? "That email or wallet is already registered." :
+      process.env.NODE_ENV === "production" && statusCode >= 500 ? "The service is temporarily unavailable. Please try again." : error.message || "Internal server error.",
   };
 
-  if (error.details) {
+  if (error.details && statusCode < 500) {
     payload.details = error.details;
   }
 

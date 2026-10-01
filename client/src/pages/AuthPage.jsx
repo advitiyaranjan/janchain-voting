@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import LoginForm from "../components/forms/LoginForm";
 import RegisterForm from "../components/forms/RegisterForm";
@@ -12,19 +12,20 @@ import { useWallet } from "../hooks/useWallet";
 function AuthPage() {
   const [activeTab, setActiveTab] = useState("login");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { login, register, issueWalletChallenge, verifyWalletChallenge } = useAuth();
+  const { login, register, issueWalletChallenge, verifyWalletChallenge, isAuthenticated, isAdmin, loading } = useAuth();
   const wallet = useWallet();
-  const navigate = useNavigate();
   const location = useLocation();
 
-  const redirectPath = location.state?.from || "/dashboard";
+  const requestedPath = location.state?.from;
+  const redirectPath = typeof requestedPath === "string" &&
+    /^\/(dashboard|admin|elections(?:\/[a-f0-9]{24})?)$/i.test(requestedPath)
+    ? requestedPath : isAdmin ? "/admin" : "/dashboard";
 
   const handleLogin = async (payload) => {
     setIsSubmitting(true);
     try {
       await login(payload);
       toast.success("Signed in successfully.");
-      navigate(redirectPath);
     } catch (error) {
       toast.error(error.response?.data?.message || error.message);
     } finally {
@@ -46,6 +47,8 @@ function AuthPage() {
   };
 
   const handleWalletLogin = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     try {
       const walletAddress = await wallet.connectWallet();
       const challenge = await issueWalletChallenge({
@@ -59,11 +62,20 @@ function AuthPage() {
         intent: "login",
       });
       toast.success("Signed in with wallet.");
-      navigate(redirectPath);
     } catch (error) {
       toast.error(error.response?.data?.message || error.message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
+
+  if (loading) {
+    return <div className="page-shell" role="status">Checking your session…</div>;
+  }
+
+  if (isAuthenticated) {
+    return <Navigate to={redirectPath} replace />;
+  }
 
   return (
     <div className="page-shell grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
@@ -83,7 +95,7 @@ function AuthPage() {
           <div className="rounded-3xl bg-white/85 p-5">
             <p className="font-semibold text-slate-900">Approval still matters</p>
             <p className="mt-2 text-sm text-slate-600">
-              Even after registration, only admin-approved wallets can cast a vote on the contract.
+              Restricted elections need admin approval. Open polls allow any wallet to vote directly on-chain.
             </p>
           </div>
         </div>
@@ -97,6 +109,8 @@ function AuthPage() {
                 activeTab === "login" ? "bg-[var(--ink)] text-white" : "bg-white text-slate-700"
               }`}
               onClick={() => setActiveTab("login")}
+              disabled={isSubmitting}
+              aria-pressed={activeTab === "login"}
             >
               Login
             </button>
@@ -105,6 +119,8 @@ function AuthPage() {
                 activeTab === "register" ? "bg-[var(--ink)] text-white" : "bg-white text-slate-700"
               }`}
               onClick={() => setActiveTab("register")}
+              disabled={isSubmitting}
+              aria-pressed={activeTab === "register"}
             >
               Register
             </button>
@@ -138,8 +154,8 @@ function AuthPage() {
             Connect MetaMask, sign a fresh server-issued challenge, and enter without retyping a password once the
             wallet has been verified on your voter profile.
           </p>
-          <Button className="mt-6" variant="secondary" onClick={handleWalletLogin}>
-            {wallet.isConnecting ? "Connecting..." : "Continue with MetaMask"}
+          <Button className="mt-6" variant="secondary" onClick={handleWalletLogin} disabled={isSubmitting || !wallet.hasWallet}>
+            {isSubmitting ? "Waiting for wallet..." : wallet.hasWallet ? "Continue with MetaMask" : "MetaMask is required"}
           </Button>
         </Card>
       </div>

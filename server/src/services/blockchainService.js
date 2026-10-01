@@ -39,7 +39,8 @@ function isConfigured() {
 
 function getProvider() {
   if (!cachedProvider) {
-    cachedProvider = new ethers.JsonRpcProvider(env.rpcUrl, env.chainId, { staticNetwork: true });
+    // A cached pending nonce can be reused even after a queued transaction mines.
+    cachedProvider = new ethers.JsonRpcProvider(env.rpcUrl, env.chainId, { cacheTimeout: -1 });
   }
   return cachedProvider;
 }
@@ -370,7 +371,7 @@ async function safeGetVoteVerification(electionId, walletAddress) {
   try {
     return await getVoteVerification(electionId, walletAddress);
   } catch (_error) {
-    return { hasVoted: false, candidateId: null, transactionHash: null, blockNumber: null, timestamp: null };
+    return { available: false, hasVoted: null, candidateId: null, transactionHash: null, blockNumber: null, timestamp: null };
   }
 }
 

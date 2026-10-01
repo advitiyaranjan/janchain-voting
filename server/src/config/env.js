@@ -1,4 +1,9 @@
-require("dotenv").config();
+require("dotenv").config({ path: require("path").join(__dirname, "../../.env") });
+
+if (process.env.NODE_ENV === "production" &&
+  (!process.env.JWT_SECRET || Buffer.byteLength(process.env.JWT_SECRET, "utf8") < 32 || process.env.JWT_SECRET === "development-only-secret")) {
+  throw new Error("Production requires a JWT_SECRET of at least 32 bytes.");
+}
 
 module.exports = {
   nodeEnv: process.env.NODE_ENV || "development",

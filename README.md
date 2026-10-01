@@ -2,6 +2,28 @@
 
 JanChain Voting is a complete end-to-end decentralized voting platform built with React, Express, MongoDB, Solidity, Hardhat, and MetaMask. It combines off-chain identity and election metadata with on-chain vote integrity, giving administrators the tools to manage elections while keeping the actual vote ledger tamper-resistant and publicly verifiable.
 
+## Start here
+
+Follow the [complete usage guide](docs/USAGE-GUIDE.md) for Windows setup, MongoDB, MetaMask, admin/voter walkthroughs, receipt verification, restarts, and troubleshooting. The web app also includes `/help`, linked from Home and the footer.
+
+```powershell
+npm ci
+npm run setup:local -- --repair-defaults
+npm run dev
+```
+
+Keep that terminal running. In another terminal, initialize a fresh local demo:
+
+```powershell
+npm run deploy:localhost
+npm run seed:missing
+npm run doctor
+```
+
+Open `http://localhost:5173/help`. The launcher starts a persistent project-local MongoDB when needed, Hardhat, the API, and the frontend. The first database launch downloads a MongoDB binary. If API/client terminals are already running, use `npm run dev:db` to add only the database. The separate commands below are also supported. Run `npm run smoke:local` to verify the live local voting flow and `npm run check` for automated validation.
+
+The setup helper preserves existing environment files; `--repair-defaults` backs up and replaces only a missing/known placeholder development JWT secret. The development API/frontend reload environment changes automatically. Keep the local blockchain running during use; restarting it clears its in-memory state. `seed:missing` preserves existing demo accounts; `seed` resets them. Use both only on a local demo database.
+
 ## What This Includes
 
 - Voter registration and login with JWT authentication
@@ -122,6 +144,11 @@ flowchart LR
 
 ## REST API Overview
 
+### Health
+
+- `GET /api/health`: API liveness
+- `GET /api/ready`: database readiness; HTTP 503 while disconnected
+
 ### Auth
 
 - `POST /api/auth/register`
@@ -159,6 +186,8 @@ flowchart LR
 - `/login` Login/Register page
 - `/dashboard` Voter dashboard
 - `/elections` Election list
+- `/chain` Direct contract election browsing and wallet voting without the catalog API or an account
+- `/help` Voter/admin walkthrough, network details, and common questions
 - `/elections/:electionId` Voting page
 - `/results/:electionId` Results and vote verification
 - `/admin` Admin control panel
@@ -167,8 +196,8 @@ flowchart LR
 
 ### Prerequisites
 
-- Node.js 20+
-- MongoDB running locally or via Atlas
+- Node.js 20.19+
+- MongoDB through `npm run dev:db`, a local installation, or Atlas
 - MetaMask browser extension
 
 ### Environment files
@@ -200,7 +229,8 @@ For local development, set:
 1. Install dependencies:
 
    ```bash
-   npm install
+   npm ci
+   npm run setup:local
    ```
 
 2. Start a local blockchain in terminal 1:
@@ -219,12 +249,12 @@ For local development, set:
 4. Update `server/.env` and `client/.env` with the deployed contract address.
    Add `VITE_RPC_URL=http://127.0.0.1:8545` to the client so MetaMask can add the local Hardhat chain automatically when needed.
 
-5. Start MongoDB.
+5. Start MongoDB, or keep `npm run dev:db` running in another terminal.
 
 6. Seed the admin account and sample voters:
 
    ```bash
-   npm run seed
+   npm run seed:missing
    ```
 
 7. Start the backend:
@@ -243,7 +273,7 @@ For local development, set:
 
 ### Wallet verification note
 
-Saving a wallet address during registration only stores the address on the voter profile. Before that wallet can vote or be used for wallet login, the voter must sign a verification challenge from the dashboard or voting page. Once verified, an approved wallet can be synced or resynced to the smart contract from the admin console.
+Saving a wallet address during registration stores a pending hint and does not reserve or verify the address. For account-based voting or wallet login, sign a verification challenge from the dashboard or voting page. Once verified, an approved wallet can be synced or resynced to the smart contract from the admin console. Direct `/chain` voting has no account requirement; the contract still enforces approval for restricted elections.
 
 ## Sample Data
 
@@ -260,6 +290,8 @@ The seed also uses two default Hardhat wallet addresses:
 
 - `0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266`
 - `0x70997970c51812dc3a010c7d01b50e0d17dc79c8`
+
+`npm run seed:missing` adds only missing demo accounts and preserves existing account settings. `npm run seed` resets the sample accounts. Neither creates an election; publish one through the admin console.
 
 ## Deployment Guide
 
@@ -314,6 +346,8 @@ Required environment variables:
 
 ## Testing and Quality Checks
 
+See [UI and security review](docs/UI-SECURITY-REVIEW.md) for the current changes, rollout requirements, checks, and architectural limits. API security regression tests run with `npm run test --workspace server`.
+
 Verified during this build:
 
 - `npm run compile`
@@ -325,7 +359,6 @@ Verified during this build:
 ## Postman
 
 Import [docs/JanChainVoting.postman_collection.json](./docs/JanChainVoting.postman_collection.json) to test the REST API quickly.
-
 ## Notes
 
 - Every ballot is signed by the voter in MetaMask. For gasless votes the backend only submits the voter's signed ballot; the contract rejects it if the signature does not match the voter, candidate, and election.

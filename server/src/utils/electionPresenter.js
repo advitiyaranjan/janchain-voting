@@ -30,6 +30,7 @@ function presentElection(election, snapshot) {
   const voteMap = new Map(
     (snapshot?.candidates || []).map((candidate) => [candidate.candidateId, candidate.voteCount])
   );
+  const chainCandidates = new Map((snapshot?.candidates || []).map((candidate) => [candidate.candidateId, candidate]));
   const { _id, ...rest } = election;
   delete rest.__v;
 
@@ -38,16 +39,20 @@ function presentElection(election, snapshot) {
     id: (_id || election.id).toString(),
     _id: (_id || election.id).toString(),
     status: computeStatus(snapshot, election),
+    title: snapshot?.title ?? election.title,
+    description: snapshot?.description ?? election.description,
+    startTime: snapshot ? new Date(snapshot.startTime * 1000).toISOString() : election.startTime,
     endTime: snapshot ? new Date(snapshot.endTime * 1000).toISOString() : election.endTime,
-    accessMode: election.accessMode || "restricted",
+    accessMode: snapshot ? (snapshot.restricted ? "restricted" : "open") : election.accessMode || "restricted",
     category: election.category || "General",
-    totalVotes: snapshot?.totalVotes ?? 0,
+    totalVotes: snapshot?.totalVotes ?? null,
     isActive: snapshot?.isActive ?? false,
     hasEnded: snapshot?.hasEnded ?? false,
     onChainAvailable: Boolean(snapshot),
     candidates: election.candidates.map((candidate) => ({
       ...candidate,
-      voteCount: voteMap.get(candidate.candidateId) || 0,
+      name: chainCandidates.get(candidate.candidateId)?.name ?? candidate.name,
+      voteCount: snapshot ? voteMap.get(candidate.candidateId) || 0 : null,
     })),
   };
 }

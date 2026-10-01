@@ -46,6 +46,11 @@ const userSchema = new mongoose.Schema(
       sparse: true,
       unique: true,
     },
+    pendingWalletAddress: {
+      type: String,
+      trim: true,
+      lowercase: true,
+    },
     isApproved: {
       type: Boolean,
       default: false,

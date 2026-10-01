@@ -66,7 +66,9 @@ export function useWallet() {
       throw new Error("MetaMask is required.");
     }
 
-    if (isExpectedChain(chainId)) {
+    const currentChainId = await window.ethereum.request({ method: "eth_chainId" });
+    if (isExpectedChain(currentChainId)) {
+      setChainId(currentChainId);
       return;
     }
 
@@ -98,7 +100,11 @@ export function useWallet() {
       });
     }
 
-    setChainId(expectedChain.hexChainId);
+    const confirmedChainId = await window.ethereum.request({ method: "eth_chainId" });
+    setChainId(confirmedChainId);
+    if (!isExpectedChain(confirmedChainId)) {
+      throw new Error(`Select ${expectedChain.chainName} in MetaMask, then try again.`);
+    }
   };
 
   const signMessage = async (message) => {

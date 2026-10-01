@@ -37,38 +37,36 @@ function HomePage() {
               </h1>
               <p className="max-w-2xl text-lg text-slate-600">
                 JanChain Voting combines wallet verification, voter approval, immutable vote receipts, and live results
-                into one full-stack decentralized voting platform.
+                into one voting platform. The blockchain stores ballots; accounts and voter approvals are managed by the platform.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
-              <Link to="/elections">
-                <Button>Explore elections</Button>
-              </Link>
-              <Link to="/login">
-                <Button variant="secondary">Register or sign in</Button>
-              </Link>
+              <Button as={Link} to="/elections">Explore elections</Button>
+              <Button as={Link} to="/chain" variant="secondary">Vote directly on-chain</Button>
+              <Button as={Link} to="/login" variant="secondary">Register or sign in</Button>
+              <Button as={Link} to="/help" variant="ghost">How to use the app →</Button>
             </div>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Card className="bg-[rgba(255,255,255,0.92)]">
-              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">One voter, one vote</p>
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">One wallet, one vote</p>
               <p className="mt-3 text-3xl font-bold text-[var(--ink)]">Smart contract enforced</p>
               <p className="mt-3 text-sm text-slate-600">
                 Double-voting is blocked directly on-chain using wallet-based vote receipts.
               </p>
             </Card>
             <Card className="bg-[rgba(255,255,255,0.92)]">
-              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Tamper-proof audit</p>
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Public ballot audit</p>
               <p className="mt-3 text-3xl font-bold text-[var(--ink)]">Public verification</p>
               <p className="mt-3 text-sm text-slate-600">
                 Every approved voter can verify that their vote made it to the blockchain.
               </p>
             </Card>
             <Card className="bg-[rgba(255,255,255,0.92)] sm:col-span-2">
-              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">End-to-end stack</p>
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Before you vote</p>
               <p className="mt-3 text-2xl font-bold text-[var(--ink)]">
-                React + Tailwind, Express + MongoDB, Solidity + Hardhat, MetaMask + Ethers
+                Your wallet and candidate choice are visible on the blockchain. Confirm your choice before signing.
               </p>
             </Card>
           </div>
@@ -85,7 +83,7 @@ function HomePage() {
           ].map(([label, value]) => (
             <Card key={label}>
               <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{label}</p>
-              <p className="mt-2 text-3xl font-bold text-[var(--ink)]">{value}</p>
+              <p className="mt-2 text-3xl font-bold text-[var(--ink)]">{value ?? "Unavailable"}</p>
             </Card>
           ))}
           {stats.paused && (

@@ -6,6 +6,7 @@ function Button({
   type = "button",
   variant = "primary",
   disabled = false,
+  as: Component = "button",
   ...props
 }) {
   const variants = {
@@ -17,9 +18,8 @@ function Button({
   };
 
   return (
-    <button
-      type={type}
-      disabled={disabled}
+    <Component
+      {...(Component === "button" ? { type, disabled } : {})}
       className={cn(
         "inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60",
         variants[variant],
@@ -28,7 +28,7 @@ function Button({
       {...props}
     >
       {children}
-    </button>
+    </Component>
   );
 }
 

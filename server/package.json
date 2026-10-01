@@ -4,9 +4,10 @@
   "private": true,
   "main": "src/server.js",
   "scripts": {
-    "dev": "nodemon src/server.js",
+    "dev": "nodemon --watch src --watch .env --ext js,json,env src/server.js",
     "start": "node src/server.js",
     "lint": "eslint .",
+    "test": "node --test test/*.test.js",
     "seed": "node src/seed/seed.js"
   },
   "dependencies": {

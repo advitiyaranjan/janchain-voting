@@ -1,8 +1,8 @@
 import {
   createContext,
-  startTransition,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import { authApi } from "../api/auth";
@@ -16,8 +16,11 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [language, setLanguage] = useState(localStorage.getItem("janchain-voting-language") || "en");
+  const sessionVersion = useRef(0);
 
   useEffect(() => {
+    let cancelled = false;
+    const version = sessionVersion.current;
     const persistedToken = localStorage.getItem(storageKey);
     if (!persistedToken) {
       setLoading(false);
@@ -28,19 +31,20 @@ export function AuthProvider({ children }) {
     authApi
       .me()
       .then((data) => {
-        startTransition(() => {
-          setToken(persistedToken);
-          setUser(data.user);
-          if (data.user.preferredLanguage) {
-            setLanguage(data.user.preferredLanguage);
-          }
-        });
+        if (cancelled || version !== sessionVersion.current) return;
+        setToken(persistedToken);
+        setUser(data.user);
+        if (data.user.preferredLanguage) {
+          setLanguage(data.user.preferredLanguage);
+        }
       })
       .catch(() => {
+        if (cancelled || version !== sessionVersion.current) return;
         localStorage.removeItem(storageKey);
         setAuthToken(null);
       })
-      .finally(() => setLoading(false));
+      .finally(() => { if (!cancelled && version === sessionVersion.current) setLoading(false); });
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -49,13 +53,13 @@ export function AuthProvider({ children }) {
 
   const login = async (payload) => {
     const data = await authApi.login(payload);
+    sessionVersion.current += 1;
     localStorage.setItem(storageKey, data.token);
     setAuthToken(data.token);
-    startTransition(() => {
-      setToken(data.token);
-      setUser(data.user);
-      setLanguage(data.user.preferredLanguage || "en");
-    });
+    setToken(data.token);
+    setUser(data.user);
+    setLanguage(data.user.preferredLanguage || "en");
+    setLoading(false);
     return data;
   };
 
@@ -65,13 +69,13 @@ export function AuthProvider({ children }) {
 
   const verifyWalletChallenge = async (payload) => {
     const data = await authApi.verifyWalletChallenge(payload);
+    sessionVersion.current += 1;
     localStorage.setItem(storageKey, data.token);
     setAuthToken(data.token);
-    startTransition(() => {
-      setToken(data.token);
-      setUser(data.user);
-      setLanguage(data.user.preferredLanguage || "en");
-    });
+    setToken(data.token);
+    setUser(data.user);
+    setLanguage(data.user.preferredLanguage || "en");
+    setLoading(false);
     return data;
   };
 
@@ -86,10 +90,12 @@ export function AuthProvider({ children }) {
   };
 
   const logout = () => {
+    sessionVersion.current += 1;
     localStorage.removeItem(storageKey);
     setAuthToken(null);
     setToken(null);
     setUser(null);
+    setLoading(false);
   };
 
   const value = {

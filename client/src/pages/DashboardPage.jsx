@@ -16,6 +16,10 @@ function DashboardPage() {
   const [ballots, setBallots] = useState([]);
   const [loading, setLoading] = useState(true);
   const [linkingWallet, setLinkingWallet] = useState(false);
+  const [electionError, setElectionError] = useState("");
+  const [ballotError, setBallotError] = useState("");
+  const [ballotsLoading, setBallotsLoading] = useState(false);
+  const [retry, setRetry] = useState(0);
   const walletVerified = Boolean(user.walletAddress && user.linkedWalletAt);
   const walletMatchesProfile = useMemo(() => {
     if (!user.walletAddress || !wallet.walletAddress) {
@@ -26,24 +30,33 @@ function DashboardPage() {
   }, [user.walletAddress, wallet.walletAddress]);
 
   useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setElectionError("");
     electionApi
       .list({ status: "all" })
-      .then((data) => setElections(data.elections.slice(0, 4)))
-      .catch((error) => toast.error(error.response?.data?.message || error.message))
-      .finally(() => setLoading(false));
-  }, []);
+      .then((data) => { if (!cancelled) setElections(data.elections.filter((election) => election.status !== "ended").slice(0, 4)); })
+      .catch((error) => { if (!cancelled) setElectionError(error.response?.data?.message || error.message); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [retry]);
 
   useEffect(() => {
+    let cancelled = false;
     if (!walletVerified) {
       setBallots([]);
       return;
     }
 
+    setBallotsLoading(true);
+    setBallotError("");
     electionApi
       .myBallots()
-      .then((data) => setBallots(data.ballots))
-      .catch(() => setBallots([]));
-  }, [walletVerified, user.walletAddress]);
+      .then((data) => { if (!cancelled) setBallots(data.ballots); })
+      .catch((error) => { if (!cancelled) setBallotError(error.response?.data?.message || error.message); })
+      .finally(() => { if (!cancelled) setBallotsLoading(false); });
+    return () => { cancelled = true; };
+  }, [walletVerified, user.walletAddress, retry]);
 
   const handleConnectWallet = async () => {
     try {
@@ -111,11 +124,11 @@ function DashboardPage() {
             </div>
             <div className="rounded-3xl bg-white/85 p-4">
               <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Wallet on file</p>
-              <p className="mt-2 text-lg font-semibold text-slate-900">{shortenAddress(user.walletAddress)}</p>
+              <p className="mt-2 text-lg font-semibold text-slate-900">{shortenAddress(user.walletAddress || user.pendingWalletAddress)}</p>
             </div>
             <div className="rounded-3xl bg-white/85 p-4">
               <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Ballots cast</p>
-              <p className="mt-2 text-lg font-semibold text-slate-900">{ballots.length}</p>
+              <p className="mt-2 text-lg font-semibold text-slate-900">{ballotsLoading ? "Loading…" : ballotError ? "Unavailable" : ballots.length}</p>
             </div>
           </div>
         </Card>
@@ -132,7 +145,7 @@ function DashboardPage() {
               <p className="mt-2">
                 {walletVerified
                   ? `Verified with a signed challenge on ${formatDateTime(user.linkedWalletAt)}.`
-                  : user.walletAddress
+                  : user.walletAddress || user.pendingWalletAddress
                     ? "Wallet saved, but it still needs a signature-based verification."
                     : "No wallet is linked to your voter profile yet."}
               </p>
@@ -171,12 +184,10 @@ function DashboardPage() {
             )}
             {!walletVerified && (
               <Button variant="accent" onClick={handleVerifyWallet} disabled={linkingWallet}>
-                {linkingWallet ? "Verifying wallet..." : user.walletAddress ? "Verify saved wallet" : "Link wallet"}
+                {linkingWallet ? "Verifying wallet..." : user.walletAddress || user.pendingWalletAddress ? "Verify wallet ownership" : "Link wallet"}
               </Button>
             )}
-            <Link to="/elections">
-              <Button>Open election board</Button>
-            </Link>
+            <Button as={Link} to="/elections">Open election board</Button>
           </div>
         </Card>
       </section>
@@ -187,15 +198,14 @@ function DashboardPage() {
             <h2 className="display-copy text-2xl font-semibold text-slate-900">Upcoming and live elections</h2>
             <p className="text-sm text-slate-500">The latest elections available to your account.</p>
           </div>
-          <Link to="/elections">
-            <Button variant="secondary">Open election board</Button>
-          </Link>
+          <Button as={Link} to="/elections" variant="secondary">Open election board</Button>
         </div>
 
-        {loading ? (
+        {electionError ? <Card role="alert"><p>{electionError}</p><Button className="mt-3" onClick={() => setRetry((value) => value + 1)}>Try again</Button></Card> : loading ? (
           <Card>Loading elections...</Card>
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
+            {elections.length === 0 && <Card>No upcoming or active elections. Check the election board for completed results.</Card>}
             {elections.map((election) => (
               <Card key={election._id || election.id}>
                 <div className="flex items-start justify-between gap-4">
@@ -208,7 +218,7 @@ function DashboardPage() {
                     <p className="mt-2 text-sm text-slate-600">{election.description}</p>
                   </div>
                   <div className="text-right text-sm text-slate-500">
-                    <p>{election.totalVotes} votes</p>
+                    <p>{election.onChainAvailable ? `${election.totalVotes} votes` : "Chain unavailable"}</p>
                     <p>{election.candidates.length} candidates</p>
                   </div>
                 </div>
@@ -234,7 +244,7 @@ function DashboardPage() {
 
         {!walletVerified ? (
           <Card className="text-sm text-slate-500">Verify your wallet to see your on-chain ballot receipts.</Card>
-        ) : ballots.length === 0 ? (
+        ) : ballotError ? <Card role="alert"><p>{ballotError}</p><Button className="mt-3" onClick={() => setRetry((value) => value + 1)}>Retry receipts</Button></Card> : ballotsLoading ? <Card role="status">Reading your ballots…</Card> : ballots.length === 0 ? (
           <Card className="text-sm text-slate-500">You have not voted in any election yet.</Card>
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
